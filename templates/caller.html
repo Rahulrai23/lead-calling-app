@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Caller Panel</title>
+</head>
+<body>
+
+<h2>My Assigned Leads</h2>
+
+{% for lead in leads %}
+<div style="border:1px solid black; padding:10px; margin:10px;">
+
+  <p><b>Name:</b> {{ lead[1] }}</p>
+  <p><b>Phone:</b> {{ lead[2] }}</p>
+
+  <!-- Call Button -->
+  <a href="tel:{{ lead[2] }}">
+    <button onclick="markCalled({{ lead[0] }})">Call</button>
+  </a>
+
+  <!-- Remarks -->
+  <form action="/submit" method="post">
+    <input type="hidden" name="lead_id" value="{{ lead[0] }}">
+    <textarea name="remarks" required 
+      onfocus="checkCall({{ lead[0] }})"></textarea>
+    <br><br>
+    <button type="submit">Submit</button>
+  </form>
+
+</div>
+{% endfor %}
+
+<script>
+function markCalled(id) {
+  localStorage.setItem("called_" + id, "yes");
+}
+
+function checkCall(id) {
+  if (!localStorage.getItem("called_" + id)) {
+    alert("Please call first");
+    document.activeElement.blur();
+  }
+}
+</script>
+
+</body>
+</html>
