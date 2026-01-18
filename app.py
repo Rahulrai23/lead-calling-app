@@ -1,3 +1,6 @@
+import pandas as pd
+import os
+
 from flask import Flask, render_template, request, redirect
 import sqlite3
 
@@ -9,6 +12,63 @@ def get_db():
 @app.route("/")
 def login():
     return render_template("login.html")
+@app.route("/upload_csv", methods=["POST"])
+def upload_csv():
+    file = request.files["file"]
+
+    if file.filename == "":
+        return "No file selected"
+
+    filepath = os.path.join("uploads", file.filename)
+    file.save(filepath)
+
+    df = pd.read_csv(filepath)
+
+    db = get_db()
+
+    for _, row in df.iterrows():
+        db.execute("""
+            INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
+            VALUES (?, ?, ?, 'pending', '')
+        """, (row["name"], str(row["phone"]), row["assigned_to"]))
+
+    db.commit()
+
+    return redirect("/manager")
+
+@app.route("/manager")
+def manager():
+    db = get_db()
+    leads = db.execute("""
+        SELECT id, name, phone, assigned_to, call_status
+        FROM leads
+        ORDER BY id DESC
+    """).fetchall()
+    return render_template("manager.html", leads=leads)
+@app.route("/report")
+def report():
+    db = get_db()
+    leads = db.execute("""
+        SELECT id, name, phone, assigned_to, call_status, remarks
+        FROM leads
+        ORDER BY id DESC
+    """).fetchall()
+    return render_template("report.html", leads=leads)
+
+@app.route("/add_lead", methods=["POST"])
+def add_lead():
+    name = request.form["name"]
+    phone = request.form["phone"]
+    assigned_to = request.form["assigned_to"]
+
+    db = get_db()
+    db.execute("""
+        INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
+        VALUES (?, ?, ?, 'pending', '')
+    """, (name, phone, assigned_to))
+    db.commit()
+
+    return redirect("/manager")
 
 @app.route("/caller")
 def caller():

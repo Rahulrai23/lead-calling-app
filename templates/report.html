@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Lead Report</title>
+</head>
+<body>
+
+<h2>Lead Report</h2>
+
+<table border="1" cellpadding="5">
+<tr>
+  <th>ID</th>
+  <th>Name</th>
+  <th>Phone</th>
+  <th>Caller</th>
+  <th>Status</th>
+  <th>Remarks</th>
+</tr>
+
+{% for lead in leads %}
+<tr>
+  <td>{{ lead[0] }}</td>
+  <td>{{ lead[1] }}</td>
+  <td>{{ lead[2] }}</td>
+  <td>{{ lead[3] }}</td>
+  <td>{{ lead[4] }}</td>
+  <td>{{ lead[5] }}</td>
+</tr>
+{% endfor %}
+</table>
+
+</body>
+</html>
