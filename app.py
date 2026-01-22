@@ -14,27 +14,59 @@ def login():
     return render_template("login.html")
 @app.route("/upload_csv", methods=["POST"])
 def upload_csv():
-    file = request.files["file"]
+    try:
+        import pandas as pd
+        import os
 
-    if file.filename == "":
-        return "No file selected"
+        file = request.files.get("file")
 
-    filepath = os.path.join("uploads", file.filename)
-    file.save(filepath)
+        if not file or file.filename == "":
+            return "ERROR: No file selected"
 
-    df = pd.read_csv(filepath)
+        if not os.path.exists("uploads"):
+            os.makedirs("uploads")
 
-    db = get_db()
+        filepath = os.path.join("uploads", file.filename)
+        file.save(filepath)
 
-    for _, row in df.iterrows():
-        db.execute("""
-            INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-            VALUES (?, ?, ?, 'pending', '')
-        """, (row["name"], str(row["phone"]), row["assigned_to"]))
+        # Read CSV
+        df = pd.read_csv(filepath)
 
-    db.commit()
+        # 🔧 NORMALIZE COLUMN NAMES (CRITICAL FIX)
+        df.columns = (
+            df.columns
+            .str.strip()        # remove spaces
+            .str.lower()        # lowercase
+            .str.replace(" ", "_")  # replace spaces with _
+        )
 
-    return redirect("/manager")
+        # Expected columns
+        required_columns = {"name", "phone", "assigned_to"}
+
+        if not required_columns.issubset(df.columns):
+            return (
+                f"ERROR: CSV must contain columns: {required_columns}. "
+                f"Found columns: {list(df.columns)}"
+            )
+
+        db = get_db()
+
+        for _, row in df.iterrows():
+            db.execute("""
+                INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
+                VALUES (?, ?, ?, 'pending', '')
+            """, (
+                str(row["name"]),
+                str(row["phone"]),
+                str(row["assigned_to"])
+            ))
+
+        db.commit()
+
+        return "CSV uploaded successfully. <a href='/manager'>Go back</a>"
+
+    except Exception as e:
+        return f"CSV UPLOAD ERROR: {str(e)}"
 
 @app.route("/manager")
 def manager():
