@@ -40,11 +40,12 @@ def upload_csv():
 def manager():
     db = get_db()
     leads = db.execute("""
-        SELECT id, name, phone, assigned_to, call_status
+        SELECT id, name, phone, assigned_to, call_status, remarks
         FROM leads
         ORDER BY id DESC
     """).fetchall()
     return render_template("manager.html", leads=leads)
+
 @app.route("/report")
 def report():
     db = get_db()
