@@ -107,8 +107,8 @@ def add_lead():
 def caller():
     db = get_db()
     leads = db.execute("""
-        SELECT * FROM leads 
-        WHERE assigned_to='caller1' 
+        SELECT * FROM leads
+        WHERE assigned_to='Anay Sarkar'
         AND call_status='pending'
     """).fetchall()
     return render_template("caller.html", leads=leads)
