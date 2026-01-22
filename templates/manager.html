@@ -46,6 +46,8 @@
     <th>Phone</th>
     <th>Assigned To</th>
     <th>Status</th>
+    <th>Remarks</th>
+
   </tr>
 
   {% for lead in leads %}
@@ -55,6 +57,8 @@
     <td>{{ lead[2] }}</td>
     <td>{{ lead[3] }}</td>
     <td>{{ lead[4] }}</td>
+    <td>{{ lead[5] }}</td>
+
   </tr>
   {% endfor %}
 
