@@ -7,24 +7,30 @@ from flask import Flask, render_template, request, redirect
 
 app = Flask(__name__)
 def init_db():
-    conn = get_db()
-    cur = conn.cursor()
+    try:
+        conn = get_db()
+        cur = conn.cursor()
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS leads (
-        id SERIAL PRIMARY KEY,
-        name TEXT,
-        phone TEXT,
-        assigned_to TEXT,
-        call_status TEXT,
-        remarks TEXT,
-        call_attempt_time TIMESTAMP
-    )
-    """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS leads (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            phone TEXT,
+            assigned_to TEXT,
+            call_status TEXT,
+            remarks TEXT,
+            call_attempt_time TIMESTAMP
+        )
+        """)
 
-    conn.commit()
-    cur.close()
-    conn.close()
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("DB init successful")
+
+    except Exception as e:
+        print("DB init failed:", e)
+
 
 def get_db():
     database_url = os.environ.get("DATABASE_URL")
