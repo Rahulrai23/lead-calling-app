@@ -2,8 +2,7 @@ import psycopg2
 import os
 from datetime import datetime
 import pandas as pd
-from flask import Flask, render_template, request, redirect, send_file
-from flask import session
+from flask import Flask, render_template, request, redirect, session
 
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-this"
@@ -51,20 +50,9 @@ def init_db():
     """, fetch=False)
 
 
+# ---------- AUTH ROUTES ----------
 
-# ---------- ROUTES ----------
-
-@app.route("/create_admin")
-def create_admin():
-    query_db("""
-        INSERT INTO users (username, password, role)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (username) DO NOTHING
-    """, ("admin", "admin123", "manager"), fetch=False)
-
-    return "Admin created"
-
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
     return redirect("/login")
 
@@ -78,7 +66,7 @@ def login():
         user = query_db("""
             SELECT username, role
             FROM users
-            WHERE username=%s AND password=%s
+            WHERE username = %s AND password = %s
         """, (username, password))
 
         if not user:
@@ -94,9 +82,37 @@ def login():
 
     return render_template("login.html")
 
-@app.route("/")
-def login():
-    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
+@app.route("/create_admin")
+def create_admin():
+    query_db("""
+        INSERT INTO users (username, password, role)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (username) DO NOTHING
+    """, ("admin", "admin123", "manager"), fetch=False)
+
+    return "Admin created"
+
+
+# ---------- MANAGER ROUTES ----------
+
+@app.route("/manager")
+def manager():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    leads = query_db("""
+        SELECT id, name, phone, assigned_to, call_status, remarks
+        FROM leads
+        ORDER BY id DESC
+    """)
+    return render_template("manager.html", leads=leads)
 
 
 @app.route("/upload_csv", methods=["POST"])
@@ -117,37 +133,12 @@ def upload_csv():
             INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
             VALUES (%s, %s, %s, 'pending', '')
         """, (
-    row["name"].strip(),
-    str(row["phone"]).strip(),
-    row["assigned_to"].strip()
-)
-, fetch=False)
+            row["name"].strip(),
+            str(row["phone"]).strip(),
+            row["assigned_to"].strip()
+        ), fetch=False)
 
     return redirect("/manager")
-
-
-@app.route("/manager")
-def manager():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    leads = query_db("""
-        SELECT id, name, phone, assigned_to, call_status, remarks
-        FROM leads
-        ORDER BY id DESC
-    """)
-    return render_template("manager.html", leads=leads)
-
-
-
-@app.route("/report")
-def report():
-    leads = query_db("""
-        SELECT id, name, phone, assigned_to, call_status, remarks
-        FROM leads
-        ORDER BY id DESC
-    """)
-    return render_template("report.html", leads=leads)
 
 
 @app.route("/add_lead", methods=["POST"])
@@ -164,8 +155,26 @@ def add_lead():
     return redirect("/manager")
 
 
+@app.route("/report")
+def report():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    leads = query_db("""
+        SELECT id, name, phone, assigned_to, call_status, remarks
+        FROM leads
+        ORDER BY id DESC
+    """)
+    return render_template("report.html", leads=leads)
+
+
+# ---------- CALLER ROUTES ----------
+
 @app.route("/caller")
 def caller_home():
+    if session.get("role") != "caller":
+        return redirect("/login")
+
     callers = query_db("""
         SELECT DISTINCT assigned_to
         FROM leads
@@ -193,21 +202,6 @@ def caller_page(caller_name):
         leads=leads,
         caller_name=caller_name
     )
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/login")
-
-
-@app.route("/fix_callers")
-def fix_callers():
-    query_db("""
-        UPDATE leads
-        SET assigned_to = TRIM(assigned_to)
-        WHERE assigned_to IS NOT NULL
-    """, fetch=False)
-    return "Caller names cleaned"
 
 
 @app.route("/mark_called/<int:lead_id>", methods=["POST"])
@@ -240,6 +234,16 @@ def submit():
     """, (remarks, lead_id), fetch=False)
 
     return redirect(f"/caller/{caller_name}")
+
+
+@app.route("/fix_callers")
+def fix_callers():
+    query_db("""
+        UPDATE leads
+        SET assigned_to = TRIM(assigned_to)
+        WHERE assigned_to IS NOT NULL
+    """, fetch=False)
+    return "Caller names cleaned"
 
 
 # ---------- START APP ----------
