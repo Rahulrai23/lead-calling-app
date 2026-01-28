@@ -1,13 +1,15 @@
-import pandas as pd
+import psycopg2
 import os
+import pandas as pd
 
 from flask import Flask, render_template, request, redirect
-import sqlite3
 
 app = Flask(__name__)
 
 def get_db():
-    return sqlite3.connect("database.db")
+    database_url = os.environ.get("DATABASE_URL")
+    conn = psycopg2.connect(database_url)
+    return conn
 
 @app.route("/")
 def login():
@@ -54,7 +56,7 @@ def upload_csv():
         for _, row in df.iterrows():
             db.execute("""
                 INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-                VALUES (?, ?, ?, 'pending', '')
+                VALUES (%s, %s, %s, 'pending', '')
             """, (
                 str(row["name"]),
                 str(row["phone"]),
@@ -125,7 +127,7 @@ def submit():
     db.execute("""
         UPDATE leads 
         SET remarks=?, call_status='completed'
-        WHERE id=?
+        WHERE id=%s
     """, (remarks, lead_id))
     db.commit()
 
