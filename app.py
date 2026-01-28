@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from flask import Flask, render_template, request, redirect
-
+app.config["DEBUG"] = True
 app = Flask(__name__)
 def init_db():
     try:
