@@ -119,6 +119,21 @@ def caller_home():
     """)
     return render_template("caller_home.html", callers=callers)
 
+
+@app.route("/caller/<caller_name>", endpoint="caller")
+def caller_page(caller_name):
+    leads = query_db("""
+        SELECT id, name, phone
+        FROM leads
+        WHERE assigned_to = %s
+          AND call_status = 'pending'
+    """, (caller_name,))
+    return render_template(
+        "caller.html",
+        leads=leads,
+        caller_name=caller_name
+    )
+
 @app.route("/fix_callers")
 def fix_callers():
     query_db("""
