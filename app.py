@@ -28,6 +28,15 @@ def query_db(query, params=None, fetch=True):
 
 def init_db():
     query_db("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE,
+            password TEXT,
+            role TEXT
+        )
+    """, fetch=False)
+
+    query_db("""
         CREATE TABLE IF NOT EXISTS leads (
             id SERIAL PRIMARY KEY,
             name TEXT,
@@ -40,7 +49,18 @@ def init_db():
     """, fetch=False)
 
 
+
 # ---------- ROUTES ----------
+
+@app.route("/create_admin")
+def create_admin():
+    query_db("""
+        INSERT INTO users (username, password, role)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (username) DO NOTHING
+    """, ("admin", "admin123", "manager"), fetch=False)
+
+    return "Admin created"
 
 @app.route("/")
 def login():
