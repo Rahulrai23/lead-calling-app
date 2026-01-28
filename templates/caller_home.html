@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Select Caller</title>
+</head>
+<body>
+
+<h2>Select Caller</h2>
+
+<ul>
+  {% for c in callers %}
+    <li>
+      <a href="/caller/{{ c[0] | urlencode }}">{{ c[0] }}</a>
+    </li>
+  {% endfor %}
+</ul>
+
+</body>
+</html>
