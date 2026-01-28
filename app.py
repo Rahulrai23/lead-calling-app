@@ -111,7 +111,10 @@ def add_lead():
 @app.route("/caller")
 def caller_home():
     callers = query_db("""
-        SELECT DISTINCT assigned_to FROM leads
+        SELECT DISTINCT assigned_to
+        FROM leads
+        WHERE assigned_to IS NOT NULL
+          AND assigned_to != ''
         ORDER BY assigned_to
     """)
     return render_template("caller_home.html", callers=callers)
