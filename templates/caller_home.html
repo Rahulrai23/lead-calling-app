@@ -10,7 +10,9 @@
 <ul>
   {% for c in callers %}
     <li>
-      <a href="/caller/{{ c[0] | urlencode }}">{{ c[0] }}</a>
+     <a href="{{ url_for('caller', caller_name=c[0]) }}">
+  {{ c[0] }}
+</a>
     </li>
   {% endfor %}
 </ul>
