@@ -19,6 +19,43 @@
     <input name="password" placeholder="Password" required>
     <button type="submit">Create Caller</button>
 </form>
+<hr>
+
+<h2>Add Lead</h2>
+
+<form method="POST" action="/add_lead">
+  <input name="name" placeholder="Customer Name" required>
+  <input name="phone" placeholder="Phone Number" required>
+
+  <select name="assigned_to" required>
+    <option value="">Assign to caller</option>
+    {% for c in callers %}
+      <option value="{{ c[0] }}">{{ c[0] }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit">Add Lead</button>
+</form>
+
+<hr>
+
+<h2>All Leads</h2>
+<table border="1">
+<tr>
+  <th>Name</th>
+  <th>Phone</th>
+  <th>Caller</th>
+  <th>Status</th>
+</tr>
+{% for l in leads %}
+<tr>
+  <td>{{ l[1] }}</td>
+  <td>{{ l[2] }}</td>
+  <td>{{ l[3] }}</td>
+  <td>{{ l[4] }}</td>
+</tr>
+{% endfor %}
+</table>
 
 </body>
 </html>
