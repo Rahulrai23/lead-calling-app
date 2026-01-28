@@ -134,10 +134,18 @@ def manager():
         SELECT username FROM users WHERE role='caller'
     """)
 
+    stats = query_db("""
+        SELECT
+            COUNT(*) FILTER (WHERE call_status='pending') AS pending,
+            COUNT(*) FILTER (WHERE call_status='completed') AS completed
+        FROM leads
+    """)
+
     return render_template(
         "manager.html",
         leads=leads,
-        callers=callers
+        callers=callers,
+        stats=stats[0]
     )
 
 
@@ -183,6 +191,8 @@ def upload_csv():
         )
     ]
 
+    inserted = 0
+
     for _, row in df.iterrows():
         if row["assigned_to"].strip().lower() not in valid_callers:
             continue
@@ -196,7 +206,9 @@ def upload_csv():
             row["assigned_to"].strip()
         ), fetch=False)
 
-    return redirect("/manager")
+        inserted += 1
+
+    return f"{inserted} leads uploaded successfully"
 
 
 # =========================================================
