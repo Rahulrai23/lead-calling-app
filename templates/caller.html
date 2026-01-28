@@ -16,10 +16,13 @@
   <p><b>Name:</b> {{ lead[1] }}</p>
   <p><b>Phone:</b> <a href="tel:{{ lead[2] }}">{{ lead[2] }}</a></p>
 
+  <form method="POST" action="/start_call/{{ lead[0] }}">
+    <button type="submit">📞 Start Call</button>
+  </form>
+
   <form method="POST" action="/submit">
     <input type="hidden" name="lead_id" value="{{ lead[0] }}">
     <input type="hidden" name="caller_name" value="{{ caller_name }}">
-
     <textarea name="remarks" placeholder="Call remarks" required></textarea>
     <br>
     <button type="submit">Submit</button>
