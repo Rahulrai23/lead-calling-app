@@ -155,6 +155,11 @@ def upload_csv():
     file = request.files.get("file")
     if not file or file.filename == "":
         return "No file selected"
+valid_callers = [c[0].lower() for c in query_db(
+    "SELECT username FROM users WHERE role='caller'"
+)]
+if row["assigned_to"].strip().lower() not in valid_callers:
+    continue  # skip invalid caller
 
     df = pd.read_csv(file)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
