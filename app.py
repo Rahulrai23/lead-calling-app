@@ -216,6 +216,18 @@ def caller_home():
 
     return render_template("caller_home.html", callers=callers)
 
+@app.route("/start_call/<int:lead_id>", methods=["POST"])
+def start_call(lead_id):
+    if session.get("role") != "caller":
+        return redirect("/login")
+
+    query_db("""
+        UPDATE leads
+        SET call_attempt_time = NOW()
+        WHERE id = %s AND call_status = 'pending'
+    """, (lead_id,), fetch=False)
+
+    return {"status": "started"}
 
 @app.route("/caller/<caller_name>")
 def caller_page(caller_name):
@@ -248,17 +260,28 @@ def mark_called(lead_id):
 
 @app.route("/submit", methods=["POST"])
 def submit():
+    if session.get("role") != "caller":
+        return redirect("/login")
+
     lead_id = request.form["lead_id"]
     remarks = request.form["remarks"]
     caller_name = request.form["caller_name"]
 
+    call_time = query_db("""
+        SELECT call_attempt_time FROM leads WHERE id = %s
+    """, (lead_id,))
+
+    if not call_time or not call_time[0][0]:
+        return "Please start the call before submitting remarks."
+
     query_db("""
         UPDATE leads
-        SET remarks=%s, call_status='completed'
-        WHERE id=%s
+        SET remarks = %s, call_status = 'completed'
+        WHERE id = %s
     """, (remarks, lead_id), fetch=False)
 
     return redirect(f"/caller/{caller_name}")
+
 
 
 # =========================================================
