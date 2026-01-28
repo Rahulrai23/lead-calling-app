@@ -3,9 +3,13 @@ import os
 from datetime import datetime, timedelta
 import pandas as pd
 
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, send_file
 
 app = Flask(__name__)
+
+# Optional: debug flag (safe now)
+app.config["DEBUG"] = True
+
 def init_db():
     try:
         conn = get_db()
@@ -30,7 +34,7 @@ def init_db():
 
     except Exception as e:
         print("DB init failed:", e)
-app.config["DEBUG"] = True
+
 
 def get_db():
     database_url = os.environ.get("DATABASE_URL")
