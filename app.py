@@ -1,10 +1,30 @@
 import psycopg2
 import os
+from datetime import datetime, timedelta
 import pandas as pd
 
 from flask import Flask, render_template, request, redirect
 
 app = Flask(__name__)
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS leads (
+        id SERIAL PRIMARY KEY,
+        name TEXT,
+        phone TEXT,
+        assigned_to TEXT,
+        call_status TEXT,
+        remarks TEXT,
+        call_attempt_time TIMESTAMP
+    )
+    """)
+
+    conn.commit()
+    cur.close()
+    conn.close()
 
 def get_db():
     database_url = os.environ.get("DATABASE_URL")
@@ -136,7 +156,9 @@ def submit():
 import os
 
 if __name__ == "__main__":
+    init_db()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
 
 
