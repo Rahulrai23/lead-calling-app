@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from flask import Flask, render_template, request, redirect
-app.config["DEBUG"] = True
+
 app = Flask(__name__)
 def init_db():
     try:
@@ -30,7 +30,7 @@ def init_db():
 
     except Exception as e:
         print("DB init failed:", e)
-
+app.config["DEBUG"] = True
 
 def get_db():
     database_url = os.environ.get("DATABASE_URL")
