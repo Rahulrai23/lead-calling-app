@@ -64,7 +64,12 @@ def upload_csv():
         query_db("""
             INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
             VALUES (%s, %s, %s, 'pending', '')
-        """, (row["name"], str(row["phone"]), row["assigned_to"]), fetch=False)
+        """, (
+    row["name"].strip(),
+    str(row["phone"]).strip(),
+    row["assigned_to"].strip()
+)
+, fetch=False)
 
     return redirect("/manager")
 
@@ -110,6 +115,15 @@ def caller_home():
         ORDER BY assigned_to
     """)
     return render_template("caller_home.html", callers=callers)
+
+@app.route("/fix_callers")
+def fix_callers():
+    query_db("""
+        UPDATE leads
+        SET assigned_to = TRIM(assigned_to)
+        WHERE assigned_to IS NOT NULL
+    """, fetch=False)
+    return "Caller names cleaned"
 
 
 @app.route("/mark_called/<int:lead_id>", methods=["POST"])
