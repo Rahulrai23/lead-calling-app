@@ -64,6 +64,36 @@ def create_admin():
 
     return "Admin created"
 
+@app.route("/", methods=["GET"])
+def home():
+    return redirect("/login")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+
+        user = query_db("""
+            SELECT username, role
+            FROM users
+            WHERE username=%s AND password=%s
+        """, (username, password))
+
+        if not user:
+            return render_template("login.html", error="Invalid credentials")
+
+        session["username"] = user[0][0]
+        session["role"] = user[0][1]
+
+        if user[0][1] == "manager":
+            return redirect("/manager")
+        else:
+            return redirect(f"/caller/{username}")
+
+    return render_template("login.html")
+
 @app.route("/")
 def login():
     return render_template("login.html")
@@ -98,12 +128,16 @@ def upload_csv():
 
 @app.route("/manager")
 def manager():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
     leads = query_db("""
         SELECT id, name, phone, assigned_to, call_status, remarks
         FROM leads
         ORDER BY id DESC
     """)
     return render_template("manager.html", leads=leads)
+
 
 
 @app.route("/report")
@@ -144,17 +178,27 @@ def caller_home():
 
 @app.route("/caller/<caller_name>", endpoint="caller")
 def caller_page(caller_name):
+    if session.get("role") != "caller" or session.get("username") != caller_name:
+        return redirect("/login")
+
     leads = query_db("""
         SELECT id, name, phone
         FROM leads
-        WHERE assigned_to = %s
+        WHERE LOWER(TRIM(assigned_to)) = LOWER(TRIM(%s))
           AND call_status = 'pending'
     """, (caller_name,))
+
     return render_template(
         "caller.html",
         leads=leads,
         caller_name=caller_name
     )
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
 
 @app.route("/fix_callers")
 def fix_callers():
