@@ -36,6 +36,23 @@ def get_db():
     database_url = os.environ.get("DATABASE_URL")
     conn = psycopg2.connect(database_url)
     return conn
+def query_db(query, params=None, fetch=True):
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(query, params or ())
+
+    result = None
+    if fetch:
+        result = cur.fetchall()
+    else:
+        conn.commit()
+
+    cur.close()
+    conn.close()
+    return result
+
+
 
 @app.route("/")
 def login():
@@ -77,19 +94,16 @@ def upload_csv():
                 f"Found columns: {list(df.columns)}"
             )
 
-        db = get_db()
+        query_db("SQL HERE", params, fetch=False)
 
         for _, row in df.iterrows():
-            db.execute("""
-                INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-                VALUES (%s, %s, %s, 'pending', '')
-            """, (
-                str(row["name"]),
-                str(row["phone"]),
-                str(row["assigned_to"])
-            ))
+            query_db("""
+    INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
+    VALUES (%s, %s, %s, 'pending', '')
+""", (name, phone, assigned_to), fetch=False)
 
-        db.commit()
+           
+        query_db("SQL HERE", params, fetch=False)
 
         return "CSV uploaded successfully. <a href='/manager'>Go back</a>"
 
@@ -98,17 +112,17 @@ def upload_csv():
 
 @app.route("/manager")
 def manager():
-    db = get_db()
-    leads = db.execute("""
-        SELECT id, name, phone, assigned_to, call_status, remarks
-        FROM leads
-        ORDER BY id DESC
-    """).fetchall()
+    query_db("SQL HERE", params, fetch=False)
+    leads = query_db("""
+    SELECT id, name, phone, assigned_to, call_status, remarks
+    FROM leads
+    ORDER BY id DESC
+""")
     return render_template("manager.html", leads=leads)
 
 @app.route("/report")
 def report():
-    db = get_db()
+    query_db("SQL HERE", params, fetch=False)
     leads = db.execute("""
         SELECT id, name, phone, assigned_to, call_status, remarks
         FROM leads
@@ -122,18 +136,18 @@ def add_lead():
     phone = request.form["phone"]
     assigned_to = request.form["assigned_to"]
 
-    db = get_db()
+    query_db("SQL HERE", params, fetch=False)
     db.execute("""
         INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
         VALUES (?, ?, ?, 'pending', '')
     """, (name, phone, assigned_to))
-    db.commit()
+    query_db("SQL HERE", params, fetch=False)
 
     return redirect("/manager")
 
 @app.route("/caller")
 def caller():
-    db = get_db()
+    query_db("SQL HERE", params, fetch=False)
     leads = db.execute("""
         SELECT * FROM leads
         WHERE assigned_to='Anay Sarkar'
@@ -149,13 +163,12 @@ def submit():
     if remarks.strip() == "":
         return "Remarks required"
 
-    db = get_db()
-    db.execute("""
-        UPDATE leads 
-        SET remarks=?, call_status='completed'
-        WHERE id=%s
-    """, (remarks, lead_id))
-    db.commit()
+    query_db("SQL HERE", params, fetch=False)
+    query_db("""
+    UPDATE leads
+    SET remarks=%s, call_status='completed'
+    WHERE id=%s
+""", (remarks, lead_id), fetch=False)
 
     return redirect("/caller")
 
