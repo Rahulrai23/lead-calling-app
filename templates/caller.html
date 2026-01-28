@@ -1,21 +1,25 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Select Caller</title>
-</head>
-<body>
+<h2>My Assigned Leads</h2>
 
-<h2>Select Caller</h2>
+{% if leads %}
+<table border="1">
+  <tr>
+    <th>Name</th>
+    <th>Phone</th>
+    <th>Action</th>
+  </tr>
 
-<ul>
-  {% for c in callers %}
-    <li>
-     <a href="{{ url_for('caller', caller_name=c[0]) }}">
-  {{ c[0] }}
-</a>
-    </li>
+  {% for lead in leads %}
+  <tr>
+    <td>{{ lead[1] }}</td>
+    <td>
+      <a href="tel:{{ lead[2] }}">Call</a>
+    </td>
+    <td>
+      <!-- remarks form -->
+    </td>
+  </tr>
   {% endfor %}
-</ul>
-
-</body>
-</html>
+</table>
+{% else %}
+<p><b>No pending leads assigned to you.</b></p>
+{% endif %}
