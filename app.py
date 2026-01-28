@@ -1,6 +1,5 @@
 import psycopg2
 import os
-from datetime import datetime
 import pandas as pd
 from flask import Flask, render_template, request, redirect, session
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -73,9 +72,7 @@ def login():
         if not user:
             return render_template("login.html", error="Invalid credentials")
 
-        db_password = user[0][1]
-
-        if not check_password_hash(db_password, password):
+        if not check_password_hash(user[0][1], password):
             return render_template("login.html", error="Invalid credentials")
 
         session["username"] = user[0][0]
@@ -88,16 +85,6 @@ def login():
 
     return render_template("login.html")
 
-@app.route("/create_caller/<username>")
-def create_caller(username):
-    query_db("""
-        INSERT INTO users (username, password, role)
-        VALUES (%s, %s, 'caller')
-        ON CONFLICT (username) DO NOTHING
-    """, (username, "caller123"), fetch=False)
-
-    return f"Caller '{username}' created with password: caller123"
-
 
 @app.route("/logout")
 def logout():
@@ -106,6 +93,15 @@ def logout():
 
 
 @app.route("/create_admin")
+def create_admin():
+    query_db("""
+        INSERT INTO users (username, password, role)
+        VALUES (%s, %s, 'manager')
+        ON CONFLICT (username) DO NOTHING
+    """, ("admin", generate_password_hash("admin123")), fetch=False)
+
+    return "Admin created"
+
 
 # ---------- MANAGER ROUTES ----------
 
@@ -119,15 +115,17 @@ def manager():
         FROM leads
         ORDER BY id DESC
     """)
-    callers = query_db("""
-    SELECT username FROM users WHERE role = 'caller'
-""")
 
-return render_template(
-    "manager.html",
-    leads=leads,
-    callers=callers
-)
+    callers = query_db("""
+        SELECT username FROM users WHERE role = 'caller'
+    """)
+
+    return render_template(
+        "manager.html",
+        leads=leads,
+        callers=callers
+    )
+
 
 @app.route("/create_caller", methods=["POST"])
 def create_caller_ui():
@@ -136,10 +134,11 @@ def create_caller_ui():
 
     username = request.form["username"].strip()
     raw_password = request.form["password"].strip()
-password = generate_password_hash(raw_password)
 
-    if not username or not password:
+    if not username or not raw_password:
         return "Username and password required"
+
+    password = generate_password_hash(raw_password)
 
     query_db("""
         INSERT INTO users (username, password, role)
@@ -152,14 +151,12 @@ password = generate_password_hash(raw_password)
 
 @app.route("/upload_csv", methods=["POST"])
 def upload_csv():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
     file = request.files.get("file")
     if not file or file.filename == "":
         return "No file selected"
-valid_callers = [c[0].lower() for c in query_db(
-    "SELECT username FROM users WHERE role='caller'"
-)]
-if row["assigned_to"].strip().lower() not in valid_callers:
-    continue  # skip invalid caller
 
     df = pd.read_csv(file)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
@@ -168,7 +165,16 @@ if row["assigned_to"].strip().lower() not in valid_callers:
     if not required.issubset(df.columns):
         return f"CSV must contain columns {required}"
 
+    valid_callers = [
+        c[0].lower() for c in query_db(
+            "SELECT username FROM users WHERE role='caller'"
+        )
+    ]
+
     for _, row in df.iterrows():
+        if row["assigned_to"].strip().lower() not in valid_callers:
+            continue
+
         query_db("""
             INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
             VALUES (%s, %s, %s, 'pending', '')
@@ -183,6 +189,9 @@ if row["assigned_to"].strip().lower() not in valid_callers:
 
 @app.route("/add_lead", methods=["POST"])
 def add_lead():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
     query_db("""
         INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
         VALUES (%s, %s, %s, 'pending', '')
