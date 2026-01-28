@@ -3,8 +3,10 @@ import os
 from datetime import datetime
 import pandas as pd
 from flask import Flask, render_template, request, redirect, send_file
+from flask import session
 
 app = Flask(__name__)
+app.secret_key = "super-secret-key-change-this"
 app.config["DEBUG"] = True
 
 
