@@ -65,6 +65,12 @@
     <th>Remarks</th>
 
   </tr>
+<h4>Existing Callers</h4>
+<ul>
+  {% for c in query_db("SELECT username FROM users WHERE role='caller'") %}
+    <li>{{ c[0] }}</li>
+  {% endfor %}
+</ul>
 
   {% for lead in leads %}
   <tr>
