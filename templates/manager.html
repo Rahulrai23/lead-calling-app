@@ -13,6 +13,15 @@
 <!-- rest of manager page -->
 
 <h2>Manager – Upload Lead</h2>
+<h3>Create Caller User</h3>
+
+<form method="post" action="/create_caller">
+  <input type="text" name="username" placeholder="Caller Username" required>
+  <input type="password" name="password" placeholder="Password" required>
+  <button type="submit">Create Caller</button>
+</form>
+
+<hr>
 
 <form action="/add_lead" method="post">
   
