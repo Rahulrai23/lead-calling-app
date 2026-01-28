@@ -103,13 +103,16 @@ def logout():
 
 @app.route("/create_admin")
 def create_admin():
+    password = generate_password_hash("admin123")
+
+    query_db("DELETE FROM users WHERE username='admin'", fetch=False)
+
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'manager')
-        ON CONFLICT (username) DO NOTHING
-    """, ("admin", generate_password_hash("admin123")), fetch=False)
+    """, ("admin", password), fetch=False)
 
-    return "Manager created → admin / admin123"
+    return "Admin RESET → admin / admin123"
 
 
 # =========================================================
