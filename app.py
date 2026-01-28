@@ -103,14 +103,13 @@ def add_lead():
     return redirect("/manager")
 
 
-@app.route("/caller/<caller_name>")
-def caller(caller_name):
-    leads = query_db("""
-        SELECT id, name, phone, assigned_to
-        FROM leads
-        WHERE assigned_to = %s AND call_status = 'pending'
-    """, (caller_name,))
-    return render_template("caller.html", leads=leads, caller_name=caller_name)
+@app.route("/caller")
+def caller_home():
+    callers = query_db("""
+        SELECT DISTINCT assigned_to FROM leads
+        ORDER BY assigned_to
+    """)
+    return render_template("caller_home.html", callers=callers)
 
 
 @app.route("/mark_called/<int:lead_id>", methods=["POST"])
