@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 import pandas as pd
 from flask import Flask, render_template, request, redirect, session
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-this"
@@ -64,23 +65,29 @@ def login():
         password = request.form["password"]
 
         user = query_db("""
-            SELECT username, role
+            SELECT username, password, role
             FROM users
-            WHERE username = %s AND password = %s
-        """, (username, password))
+            WHERE username = %s
+        """, (username,))
 
         if not user:
             return render_template("login.html", error="Invalid credentials")
 
-        session["username"] = user[0][0]
-        session["role"] = user[0][1]
+        db_password = user[0][1]
 
-        if user[0][1] == "manager":
+        if not check_password_hash(db_password, password):
+            return render_template("login.html", error="Invalid credentials")
+
+        session["username"] = user[0][0]
+        session["role"] = user[0][2]
+
+        if user[0][2] == "manager":
             return redirect("/manager")
         else:
             return redirect(f"/caller/{username}")
 
     return render_template("login.html")
+
 @app.route("/create_caller/<username>")
 def create_caller(username):
     query_db("""
@@ -99,15 +106,6 @@ def logout():
 
 
 @app.route("/create_admin")
-def create_admin():
-    query_db("""
-        INSERT INTO users (username, password, role)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (username) DO NOTHING
-    """, ("admin", "admin123", "manager"), fetch=False)
-
-    return "Admin created"
-
 
 # ---------- MANAGER ROUTES ----------
 
@@ -121,14 +119,24 @@ def manager():
         FROM leads
         ORDER BY id DESC
     """)
-    return render_template("manager.html", leads=leads)
+    callers = query_db("""
+    SELECT username FROM users WHERE role = 'caller'
+""")
+
+return render_template(
+    "manager.html",
+    leads=leads,
+    callers=callers
+)
+
 @app.route("/create_caller", methods=["POST"])
 def create_caller_ui():
     if session.get("role") != "manager":
         return redirect("/login")
 
     username = request.form["username"].strip()
-    password = request.form["password"].strip()
+    raw_password = request.form["password"].strip()
+password = generate_password_hash(raw_password)
 
     if not username or not password:
         return "Username and password required"
