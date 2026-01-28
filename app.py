@@ -58,7 +58,7 @@ def manager():
     if session.get("role") != "manager":
         return redirect("/login")
 
-    return "Manager OK"
+    return render_template("manager.html")
 
 
 @app.route("/create_caller", methods=["POST"])
