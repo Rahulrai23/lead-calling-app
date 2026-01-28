@@ -40,7 +40,7 @@ def login():
         )
 
         if not user or not check_password_hash(user[0][1], password):
-            return "Invalid credentials"
+            return render_template("login.html", error="Invalid credentials")
 
         session["username"] = user[0][0]
         session["role"] = user[0][2]
@@ -48,9 +48,11 @@ def login():
         if user[0][2] == "manager":
             return redirect("/manager")
 
-        return "Logged in as caller"
+        return redirect(f"/caller/{username}")
 
-    return "Login Page"
+    # 👇 THIS IS THE IMPORTANT LINE
+    return render_template("login.html")
+
 
 
 @app.route("/manager")
