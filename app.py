@@ -122,6 +122,24 @@ def manager():
         ORDER BY id DESC
     """)
     return render_template("manager.html", leads=leads)
+@app.route("/create_caller", methods=["POST"])
+def create_caller_ui():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    username = request.form["username"].strip()
+    password = request.form["password"].strip()
+
+    if not username or not password:
+        return "Username and password required"
+
+    query_db("""
+        INSERT INTO users (username, password, role)
+        VALUES (%s, %s, 'caller')
+        ON CONFLICT (username) DO NOTHING
+    """, (username, password), fetch=False)
+
+    return redirect("/manager")
 
 
 @app.route("/upload_csv", methods=["POST"])
