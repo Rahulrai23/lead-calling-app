@@ -1,21 +1,33 @@
 import psycopg2
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
-
 from flask import Flask, render_template, request, redirect, send_file
 
 app = Flask(__name__)
-
-# Optional: debug flag (safe now)
 app.config["DEBUG"] = True
 
-def init_db():
-    try:
-        conn = get_db()
-        cur = conn.cursor()
 
-        cur.execute("""
+# ---------- DATABASE HELPERS ----------
+
+def get_db():
+    return psycopg2.connect(os.environ.get("DATABASE_URL"))
+
+
+def query_db(query, params=None, fetch=True):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(query, params or ())
+    result = cur.fetchall() if fetch else None
+    if not fetch:
+        conn.commit()
+    cur.close()
+    conn.close()
+    return result
+
+
+def init_db():
+    query_db("""
         CREATE TABLE IF NOT EXISTS leads (
             id SERIAL PRIMARY KEY,
             name TEXT,
@@ -25,114 +37,81 @@ def init_db():
             remarks TEXT,
             call_attempt_time TIMESTAMP
         )
-        """)
-
-        conn.commit()
-        cur.close()
-        conn.close()
-        print("DB init successful")
-
-    except Exception as e:
-        print("DB init failed:", e)
+    """, fetch=False)
 
 
-def get_db():
-    database_url = os.environ.get("DATABASE_URL")
-    conn = psycopg2.connect(database_url)
-    return conn
-def query_db(query, params=None, fetch=True):
-    conn = get_db()
-    cur = conn.cursor()
-
-    cur.execute(query, params or ())
-
-    result = None
-    if fetch:
-        result = cur.fetchall()
-    else:
-        conn.commit()
-
-    cur.close()
-    conn.close()
-    return result
-
-
+# ---------- ROUTES ----------
 
 @app.route("/")
 def login():
     return render_template("login.html")
+
+
 @app.route("/upload_csv", methods=["POST"])
 def upload_csv():
-    try:
-        import pandas as pd
-        import os
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return "No file selected"
 
-        file = request.files.get("file")
+    df = pd.read_csv(file)
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        if not file or file.filename == "":
-            return "ERROR: No file selected"
+    required = {"name", "phone", "assigned_to"}
+    if not required.issubset(df.columns):
+        return f"CSV must contain columns {required}"
 
-        if not os.path.exists("uploads"):
-            os.makedirs("uploads")
+    for _, row in df.iterrows():
+        query_db("""
+            INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
+            VALUES (%s, %s, %s, 'pending', '')
+        """, (row["name"], str(row["phone"]), row["assigned_to"]), fetch=False)
 
-        filepath = os.path.join("uploads", file.filename)
-        file.save(filepath)
+    return redirect("/manager")
 
-        # Read CSV
-        df = pd.read_csv(filepath)
-
-        # 🔧 NORMALIZE COLUMN NAMES (CRITICAL FIX)
-        df.columns = (
-            df.columns
-            .str.strip()        # remove spaces
-            .str.lower()        # lowercase
-            .str.replace(" ", "_")  # replace spaces with _
-        )
-
-        # Expected columns
-        required_columns = {"name", "phone", "assigned_to"}
-
-        if not required_columns.issubset(df.columns):
-            return (
-                f"ERROR: CSV must contain columns: {required_columns}. "
-                f"Found columns: {list(df.columns)}"
-            )
-
-        query_db("SQL HERE",  fetch=False)
-
-        for _, row in df.iterrows():
-            query_db("""
-    INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-    VALUES (%s, %s, %s, 'pending', '')
-""", (name, phone, assigned_to), fetch=False)
-
-           
-        query_db("SQL HERE",  fetch=False)
-
-        return "CSV uploaded successfully. <a href='/manager'>Go back</a>"
-
-    except Exception as e:
-        return f"CSV UPLOAD ERROR: {str(e)}"
 
 @app.route("/manager")
 def manager():
-    query_db("SQL HERE",  fetch=False)
     leads = query_db("""
-    SELECT id, name, phone, assigned_to, call_status, remarks
-    FROM leads
-    ORDER BY id DESC
-""")
-    return render_template("manager.html", leads=leads)
-
-@app.route("/report")
-def report():
-    query_db("SQL HERE",  fetch=False)
-    leads = db.execute("""
         SELECT id, name, phone, assigned_to, call_status, remarks
         FROM leads
         ORDER BY id DESC
-    """).fetchall()
+    """)
+    return render_template("manager.html", leads=leads)
+
+
+@app.route("/report")
+def report():
+    leads = query_db("""
+        SELECT id, name, phone, assigned_to, call_status, remarks
+        FROM leads
+        ORDER BY id DESC
+    """)
     return render_template("report.html", leads=leads)
+
+
+@app.route("/add_lead", methods=["POST"])
+def add_lead():
+    query_db("""
+        INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
+        VALUES (%s, %s, %s, 'pending', '')
+    """, (
+        request.form["name"],
+        request.form["phone"],
+        request.form["assigned_to"]
+    ), fetch=False)
+
+    return redirect("/manager")
+
+
+@app.route("/caller/<caller_name>")
+def caller(caller_name):
+    leads = query_db("""
+        SELECT id, name, phone, assigned_to
+        FROM leads
+        WHERE assigned_to = %s AND call_status = 'pending'
+    """, (caller_name,))
+    return render_template("caller.html", leads=leads, caller_name=caller_name)
+
 
 @app.route("/mark_called/<int:lead_id>", methods=["POST"])
 def mark_called(lead_id):
@@ -141,78 +120,34 @@ def mark_called(lead_id):
         SET call_attempt_time = NOW()
         WHERE id = %s
     """, (lead_id,), fetch=False)
-
     return {"status": "ok"}
 
-@app.route("/add_lead", methods=["POST"])
-def add_lead():
-    name = request.form["name"]
-    phone = request.form["phone"]
-    assigned_to = request.form["assigned_to"]
-
-    query_db("SQL HERE",  fetch=False)
-    db.execute("""
-        INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-        VALUES (?, ?, ?, 'pending', '')
-    """, (name, phone, assigned_to))
-    query_db("SQL HERE",  fetch=False)
-
-    return redirect("/manager")
-
-@app.route("/caller/<caller_name>")
-def caller(caller_name):
-    leads = query_db("""
-        SELECT id, name, phone, assigned_to, call_status, remarks
-        FROM leads
-        WHERE assigned_to = %s
-        AND call_status = 'pending'
-    """, (caller_name,))
-
-    return render_template(
-        "caller.html",
-        leads=leads,
-        caller_name=caller_name
-    )
 
 @app.route("/submit", methods=["POST"])
 def submit():
     lead_id = request.form["lead_id"]
     remarks = request.form["remarks"]
+    caller_name = request.form["caller_name"]
 
-    lead = query_db("""
-        SELECT call_attempt_time
-        FROM leads
-        WHERE id = %s
+    call_time = query_db("""
+        SELECT call_attempt_time FROM leads WHERE id = %s
     """, (lead_id,))
 
-    if not lead or not lead[0][0]:
-        return "Please call first."
+    if not call_time or not call_time[0][0]:
+        return "Please call before submitting remarks."
 
     query_db("""
         UPDATE leads
-        SET remarks = %s,
-            call_status = 'completed'
+        SET remarks = %s, call_status = 'completed'
         WHERE id = %s
     """, (remarks, lead_id), fetch=False)
 
-    return redirect(f"/caller/{request.form.get('caller_name')}")
+    return redirect(f"/caller/{caller_name}")
 
 
-    query_db("SQL HERE",  fetch=False)
-    query_db("""
-    UPDATE leads
-    SET remarks=%s, call_status='completed'
-    WHERE id=%s
-""", (remarks, lead_id), fetch=False)
-
-    return redirect("/caller")
-
-import os
+# ---------- START APP ----------
 
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-
-
