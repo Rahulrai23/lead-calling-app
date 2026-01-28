@@ -22,6 +22,12 @@
 </form>
 
 <hr>
+<select name="assigned_to" required>
+  <option value="">-- Select Caller --</option>
+  {% for c in callers %}
+    <option value="{{ c[0] }}">{{ c[0] }}</option>
+  {% endfor %}
+</select>
 
 <form action="/add_lead" method="post">
   
