@@ -81,6 +81,15 @@ def login():
             return redirect(f"/caller/{username}")
 
     return render_template("login.html")
+@app.route("/create_caller/<username>")
+def create_caller(username):
+    query_db("""
+        INSERT INTO users (username, password, role)
+        VALUES (%s, %s, 'caller')
+        ON CONFLICT (username) DO NOTHING
+    """, (username, "caller123"), fetch=False)
+
+    return f"Caller '{username}' created with password: caller123"
 
 
 @app.route("/logout")
