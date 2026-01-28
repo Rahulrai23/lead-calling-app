@@ -98,7 +98,7 @@ def upload_csv():
                 f"Found columns: {list(df.columns)}"
             )
 
-        query_db("SQL HERE", params, fetch=False)
+        query_db("SQL HERE",  fetch=False)
 
         for _, row in df.iterrows():
             query_db("""
@@ -107,7 +107,7 @@ def upload_csv():
 """, (name, phone, assigned_to), fetch=False)
 
            
-        query_db("SQL HERE", params, fetch=False)
+        query_db("SQL HERE",  fetch=False)
 
         return "CSV uploaded successfully. <a href='/manager'>Go back</a>"
 
@@ -116,7 +116,7 @@ def upload_csv():
 
 @app.route("/manager")
 def manager():
-    query_db("SQL HERE", params, fetch=False)
+    query_db("SQL HERE",  fetch=False)
     leads = query_db("""
     SELECT id, name, phone, assigned_to, call_status, remarks
     FROM leads
@@ -126,7 +126,7 @@ def manager():
 
 @app.route("/report")
 def report():
-    query_db("SQL HERE", params, fetch=False)
+    query_db("SQL HERE",  fetch=False)
     leads = db.execute("""
         SELECT id, name, phone, assigned_to, call_status, remarks
         FROM leads
@@ -134,40 +134,71 @@ def report():
     """).fetchall()
     return render_template("report.html", leads=leads)
 
+@app.route("/mark_called/<int:lead_id>", methods=["POST"])
+def mark_called(lead_id):
+    query_db("""
+        UPDATE leads
+        SET call_attempt_time = NOW()
+        WHERE id = %s
+    """, (lead_id,), fetch=False)
+
+    return {"status": "ok"}
+
 @app.route("/add_lead", methods=["POST"])
 def add_lead():
     name = request.form["name"]
     phone = request.form["phone"]
     assigned_to = request.form["assigned_to"]
 
-    query_db("SQL HERE", params, fetch=False)
+    query_db("SQL HERE",  fetch=False)
     db.execute("""
         INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
         VALUES (?, ?, ?, 'pending', '')
     """, (name, phone, assigned_to))
-    query_db("SQL HERE", params, fetch=False)
+    query_db("SQL HERE",  fetch=False)
 
     return redirect("/manager")
 
-@app.route("/caller")
-def caller():
-    query_db("SQL HERE", params, fetch=False)
-    leads = db.execute("""
-        SELECT * FROM leads
-        WHERE assigned_to='Anay Sarkar'
-        AND call_status='pending'
-    """).fetchall()
-    return render_template("caller.html", leads=leads)
+@app.route("/caller/<caller_name>")
+def caller(caller_name):
+    leads = query_db("""
+        SELECT id, name, phone, assigned_to, call_status, remarks
+        FROM leads
+        WHERE assigned_to = %s
+        AND call_status = 'pending'
+    """, (caller_name,))
+
+    return render_template(
+        "caller.html",
+        leads=leads,
+        caller_name=caller_name
+    )
 
 @app.route("/submit", methods=["POST"])
 def submit():
     lead_id = request.form["lead_id"]
     remarks = request.form["remarks"]
 
-    if remarks.strip() == "":
-        return "Remarks required"
+    lead = query_db("""
+        SELECT call_attempt_time
+        FROM leads
+        WHERE id = %s
+    """, (lead_id,))
 
-    query_db("SQL HERE", params, fetch=False)
+    if not lead or not lead[0][0]:
+        return "Please call first."
+
+    query_db("""
+        UPDATE leads
+        SET remarks = %s,
+            call_status = 'completed'
+        WHERE id = %s
+    """, (remarks, lead_id), fetch=False)
+
+    return redirect(f"/caller/{request.form.get('caller_name')}")
+
+
+    query_db("SQL HERE",  fetch=False)
     query_db("""
     UPDATE leads
     SET remarks=%s, call_status='completed'
