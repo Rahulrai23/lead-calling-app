@@ -45,6 +45,17 @@
   </div>
 
   <!-- LEADS TABLE -->
+  <th>Duration (sec)</th>
+
+<td>
+  {% if l[4] %}
+    {{ l[4] }} sec
+  {% else %}
+    —
+  {% endif %}
+</td>
+{{ (l[4] // 60) }}m {{ (l[4] % 60) }}s
+
   <div class="card">
     <h3>All Leads</h3>
     <table>
