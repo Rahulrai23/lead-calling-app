@@ -1,15 +1,23 @@
-import psycopg2
+# =========================================================
+# LEAD CALLING APP – MANAGER → CALLER (STABLE VERSION)
+# =========================================================
+
 import os
+import psycopg2
 import pandas as pd
 from flask import Flask, render_template, request, redirect, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# =========================================================
+# APP CONFIG
+# =========================================================
+
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-this"
-app.config["DEBUG"] = True
 
-
-# ---------- DATABASE HELPERS ----------
+# =========================================================
+# DATABASE HELPERS
+# =========================================================
 
 def get_db():
     return psycopg2.connect(os.environ.get("DATABASE_URL"))
@@ -49,8 +57,9 @@ def init_db():
         )
     """, fetch=False)
 
-
-# ---------- AUTH ROUTES ----------
+# =========================================================
+# AUTH ROUTES
+# =========================================================
 
 @app.route("/")
 def home():
@@ -60,19 +69,15 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"]
+        username = request.form["username"].strip()
         password = request.form["password"]
 
-        user = query_db("""
-            SELECT username, password, role
-            FROM users
-            WHERE username = %s
-        """, (username,))
+        user = query_db(
+            "SELECT username, password, role FROM users WHERE username=%s",
+            (username,)
+        )
 
-        if not user:
-            return render_template("login.html", error="Invalid credentials")
-
-        if not check_password_hash(user[0][1], password):
+        if not user or not check_password_hash(user[0][1], password):
             return render_template("login.html", error="Invalid credentials")
 
         session["username"] = user[0][0]
@@ -92,18 +97,27 @@ def logout():
     return redirect("/login")
 
 
+# =========================================================
+# INITIAL MANAGER (ONE-TIME)
+# =========================================================
+
 @app.route("/create_admin")
 def create_admin():
+    password = generate_password_hash("admin123")
+
+    query_db("DELETE FROM users WHERE username='admin'", fetch=False)
+
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'manager')
-        ON CONFLICT (username) DO NOTHING
-    """, ("admin", generate_password_hash("admin123")), fetch=False)
+    """, ("admin", password), fetch=False)
 
-    return "Admin created"
+    return "Admin RESET → admin / admin123"
 
 
-# ---------- MANAGER ROUTES ----------
+# =========================================================
+# MANAGER ROUTES
+# =========================================================
 
 @app.route("/manager")
 def manager():
@@ -117,34 +131,40 @@ def manager():
     """)
 
     callers = query_db("""
-        SELECT username FROM users WHERE role = 'caller'
+        SELECT username FROM users WHERE role='caller'
+    """)
+
+    stats = query_db("""
+        SELECT
+            COUNT(*) FILTER (WHERE call_status='pending') AS pending,
+            COUNT(*) FILTER (WHERE call_status='completed') AS completed
+        FROM leads
     """)
 
     return render_template(
         "manager.html",
         leads=leads,
-        callers=callers
+        callers=callers,
+        stats=stats[0]
     )
 
 
 @app.route("/create_caller", methods=["POST"])
-def create_caller_ui():
+def create_caller():
     if session.get("role") != "manager":
         return redirect("/login")
 
     username = request.form["username"].strip()
-    raw_password = request.form["password"].strip()
+    password = request.form["password"].strip()
 
-    if not username or not raw_password:
+    if not username or not password:
         return "Username and password required"
-
-    password = generate_password_hash(raw_password)
 
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'caller')
         ON CONFLICT (username) DO NOTHING
-    """, (username, password), fetch=False)
+    """, (username, generate_password_hash(password)), fetch=False)
 
     return redirect("/manager")
 
@@ -171,6 +191,8 @@ def upload_csv():
         )
     ]
 
+    inserted = 0
+
     for _, row in df.iterrows():
         if row["assigned_to"].strip().lower() not in valid_callers:
             continue
@@ -184,40 +206,14 @@ def upload_csv():
             row["assigned_to"].strip()
         ), fetch=False)
 
-    return redirect("/manager")
+        inserted += 1
+
+    return f"{inserted} leads uploaded successfully"
 
 
-@app.route("/add_lead", methods=["POST"])
-def add_lead():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    query_db("""
-        INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-        VALUES (%s, %s, %s, 'pending', '')
-    """, (
-        request.form["name"],
-        request.form["phone"],
-        request.form["assigned_to"]
-    ), fetch=False)
-
-    return redirect("/manager")
-
-
-@app.route("/report")
-def report():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    leads = query_db("""
-        SELECT id, name, phone, assigned_to, call_status, remarks
-        FROM leads
-        ORDER BY id DESC
-    """)
-    return render_template("report.html", leads=leads)
-
-
-# ---------- CALLER ROUTES ----------
+# =========================================================
+# CALLER ROUTES
+# =========================================================
 
 @app.route("/caller")
 def caller_home():
@@ -227,14 +223,25 @@ def caller_home():
     callers = query_db("""
         SELECT DISTINCT assigned_to
         FROM leads
-        WHERE assigned_to IS NOT NULL
-          AND assigned_to != ''
         ORDER BY assigned_to
     """)
+
     return render_template("caller_home.html", callers=callers)
 
+@app.route("/start_call/<int:lead_id>", methods=["POST"])
+def start_call(lead_id):
+    if session.get("role") != "caller":
+        return redirect("/login")
 
-@app.route("/caller/<caller_name>", endpoint="caller")
+    query_db("""
+        UPDATE leads
+        SET call_attempt_time = NOW()
+        WHERE id = %s AND call_status = 'pending'
+    """, (lead_id,), fetch=False)
+
+    return {"status": "started"}
+
+@app.route("/caller/<caller_name>")
 def caller_page(caller_name):
     if session.get("role") != "caller" or session.get("username") != caller_name:
         return redirect("/login")
@@ -242,8 +249,7 @@ def caller_page(caller_name):
     leads = query_db("""
         SELECT id, name, phone
         FROM leads
-        WHERE LOWER(TRIM(assigned_to)) = LOWER(TRIM(%s))
-          AND call_status = 'pending'
+        WHERE assigned_to=%s AND call_status='pending'
     """, (caller_name,))
 
     return render_template(
@@ -258,13 +264,17 @@ def mark_called(lead_id):
     query_db("""
         UPDATE leads
         SET call_attempt_time = NOW()
-        WHERE id = %s
+        WHERE id=%s
     """, (lead_id,), fetch=False)
+
     return {"status": "ok"}
 
 
 @app.route("/submit", methods=["POST"])
 def submit():
+    if session.get("role") != "caller":
+        return redirect("/login")
+
     lead_id = request.form["lead_id"]
     remarks = request.form["remarks"]
     caller_name = request.form["caller_name"]
@@ -274,7 +284,7 @@ def submit():
     """, (lead_id,))
 
     if not call_time or not call_time[0][0]:
-        return "Please call before submitting remarks."
+        return "Please start the call before submitting remarks."
 
     query_db("""
         UPDATE leads
@@ -285,19 +295,16 @@ def submit():
     return redirect(f"/caller/{caller_name}")
 
 
-@app.route("/fix_callers")
-def fix_callers():
-    query_db("""
-        UPDATE leads
-        SET assigned_to = TRIM(assigned_to)
-        WHERE assigned_to IS NOT NULL
-    """, fetch=False)
-    return "Caller names cleaned"
 
-
-# ---------- START APP ----------
+# =========================================================
+# START APP
+# =========================================================
 
 if __name__ == "__main__":
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        print("INIT DB ERROR:", e)
+
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
