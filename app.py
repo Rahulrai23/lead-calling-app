@@ -133,11 +133,7 @@ def admin():
         WHERE u.role='manager'
     """)
 
-    return render_template(
-        "admin.html",
-        states=states,
-        managers=managers
-    )
+    return render_template("admin.html", states=states, managers=managers)
 
 @app.route("/create_manager", methods=["POST"])
 def create_manager():
@@ -199,12 +195,14 @@ def create_caller():
             (SELECT state_id FROM users WHERE id=%s)
         )
     """, (
-        request.form["username"],
+        request.form["username"].strip(),
         generate_password_hash(request.form["password"]),
         session["user_id"]
     ), fetch=False)
 
     return redirect("/manager")
+
+# ================= UPLOAD LEADS (FIXED) =================
 
 @app.route("/upload_leads", methods=["POST"])
 def upload_leads():
@@ -215,26 +213,30 @@ def upload_leads():
     if not file or file.filename == "":
         return "No file selected"
 
+    filename = file.filename.lower()
+
     try:
-       if filename.endswith(".csv"):
-    df = pd.read_csv(file)
+        if filename.endswith(".csv"):
+            df = pd.read_csv(file)
 
-elif filename.endswith(".xlsx"):
-    df = pd.read_excel(file, engine="openpyxl")
+        elif filename.endswith(".xlsx"):
+            df = pd.read_excel(file, engine="openpyxl")
 
-else:
-    return "Only CSV or XLSX files allowed"
+        else:
+            return "Only CSV or XLSX files allowed"
 
     except Exception as e:
         return f"File read error: {e}"
 
+    # Normalize columns
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     if not {"name", "phone", "assigned_to"}.issubset(df.columns):
         return "Required columns: name, phone, assigned_to"
 
+    # Valid callers (case-insensitive)
     valid_callers = [
-        r[0] for r in query_db("""
+        r[0].lower() for r in query_db("""
             SELECT username FROM users
             WHERE role='caller'
             AND state_id=(SELECT state_id FROM users WHERE id=%s)
@@ -242,8 +244,11 @@ else:
     ]
 
     inserted = 0
+
     for _, row in df.iterrows():
-        if row["assigned_to"] not in valid_callers:
+        caller = str(row["assigned_to"]).strip().lower()
+
+        if caller not in valid_callers:
             continue
 
         query_db("""
@@ -252,7 +257,7 @@ else:
         """, (
             str(row["name"]).strip(),
             str(row["phone"]).strip(),
-            str(row["assigned_to"]).strip()
+            caller
         ), fetch=False)
 
         inserted += 1
