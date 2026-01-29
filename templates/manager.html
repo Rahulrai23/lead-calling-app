@@ -3,6 +3,25 @@
 <head>
   <title>Manager Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .progress-container {
+      width: 100%;
+      background: #eee;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 10px;
+      display: none;
+    }
+    .progress-bar {
+      height: 18px;
+      width: 0%;
+      background: #4caf50;
+      text-align: center;
+      color: white;
+      font-size: 12px;
+      line-height: 18px;
+    }
+  </style>
 </head>
 <body>
 
@@ -34,14 +53,30 @@
       <button>Create Caller</button>
     </form>
   </div>
-<!-- UPLOAD LEADS -->
-<div class="card">
-  <h3>Upload Leads (CSV / XLSX)</h3>
-  <form method="POST" action="/upload_leads" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".csv,.xlsx" required>
-    <button>Upload</button>
-  </form>
-</div>
+
+  <!-- UPLOAD LEADS -->
+  <div class="card">
+    <h3>Upload Leads (CSV / XLSX)</h3>
+
+    <!-- TEMPLATE DOWNLOAD -->
+    <p>
+      <a href="/static/lead_upload_template.xlsx" download>
+        ⬇ Download Excel Template
+      </a>
+    </p>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv,.xlsx" required>
+      <button type="submit">Upload</button>
+    </form>
+
+    <!-- PROGRESS BAR -->
+    <div class="progress-container" id="progressContainer">
+      <div class="progress-bar" id="progressBar">0%</div>
+    </div>
+
+    <p id="uploadResult"></p>
+  </div>
 
   <!-- LEADS TABLE -->
   <div class="card">
@@ -70,6 +105,44 @@
   </div>
 
 </div>
+
+<script>
+document.getElementById("uploadForm").addEventListener("submit", function(e) {
+  e.preventDefault();
+
+  const formData = new FormData(this);
+  const xhr = new XMLHttpRequest();
+
+  const progressContainer = document.getElementById("progressContainer");
+  const progressBar = document.getElementById("progressBar");
+  const result = document.getElementById("uploadResult");
+
+  progressContainer.style.display = "block";
+  progressBar.style.width = "0%";
+  progressBar.innerText = "0%";
+  result.innerText = "";
+
+  xhr.upload.addEventListener("progress", function(e) {
+    if (e.lengthComputable) {
+      const percent = Math.round((e.loaded / e.total) * 100);
+      progressBar.style.width = percent + "%";
+      progressBar.innerText = percent + "%";
+    }
+  });
+
+  xhr.onload = function() {
+    result.innerText = xhr.responseText;
+    setTimeout(() => location.reload(), 1200);
+  };
+
+  xhr.onerror = function() {
+    result.innerText = "❌ Upload failed";
+  };
+
+  xhr.open("POST", "/upload_leads", true);
+  xhr.send(formData);
+});
+</script>
 
 </body>
 </html>
