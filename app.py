@@ -272,24 +272,11 @@ def start_call(lead_id):
 
     query_db("""
         UPDATE leads
-        SET call_attempt_time = NOW()
-        WHERE id = %s AND call_status = 'pending'
-    """, (lead_id,), fetch=False)
-
-    return {"status": "started"}
-    
-@app.route("/start_call/<int:lead_id>", methods=["POST"])
-def start_call(lead_id):
-    if session.get("role") != "caller":
-        return redirect("/login")
-
-    query_db("""
-        UPDATE leads
         SET call_start_time = NOW()
         WHERE id = %s
     """, (lead_id,), fetch=False)
 
-    return redirect(request.referrer)
+    return {"status": "started"}
 
 @app.route("/caller/<caller_name>")
 def caller_page(caller_name):
