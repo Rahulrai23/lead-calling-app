@@ -105,6 +105,12 @@ def login():
 def logout():
     session.clear()
     return redirect("/login")
+@app.route("/hard_reset_db")
+def hard_reset_db():
+    query_db("DROP TABLE IF EXISTS leads CASCADE", fetch=False)
+    query_db("DROP TABLE IF EXISTS users CASCADE", fetch=False)
+    init_db()
+    return "DATABASE RESET COMPLETED"
 
 
 # =========================================================
