@@ -1,4 +1,4 @@
 flask
+psycopg2-binary
 pandas
 openpyxl
-psycopg2-binary
