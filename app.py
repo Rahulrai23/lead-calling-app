@@ -4,6 +4,7 @@
 
 import os
 import psycopg2
+import pandas as pd
 from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -81,9 +82,10 @@ def login():
 
         if user[0][2] == "admin":
             return redirect("/admin")
-        if user[0][2] == "manager":
+        elif user[0][2] == "manager":
             return redirect("/manager")
-        return redirect(f"/caller/{u}")
+        else:
+            return redirect(f"/caller/{u}")
 
     return render_template("login.html")
 
@@ -98,71 +100,6 @@ def whoami():
         "username": session.get("username"),
         "role": session.get("role")
     })
-@app.route("/upload_leads", methods=["POST"])
-def upload_leads():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    file = request.files.get("file")
-    if not file or file.filename == "":
-        return "No file selected"
-
-    filename = file.filename.lower()
-
-    # Read CSV or Excel safely
-    try:
-        if filename.endswith(".csv"):
-            df = pd.read_csv(file)
-        elif filename.endswith(".xlsx"):
-            df = pd.read_excel(file)
-        else:
-            return "Only CSV or XLSX files allowed"
-    except Exception as e:
-        return f"File read error: {e}"
-
-    # Normalize columns
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.lower()
-        .str.replace(" ", "_")
-    )
-
-    required = {"name", "phone", "assigned_to"}
-    if not required.issubset(df.columns):
-        return "File must contain columns: name, phone, assigned_to"
-
-    # Fetch valid callers (same state as manager)
-    valid_callers = [
-        c[0].lower() for c in query_db("""
-            SELECT username FROM users
-            WHERE role='caller'
-              AND state_id = (
-                  SELECT state_id FROM users WHERE id=%s
-              )
-        """, (session["user_id"],))
-    ]
-
-    inserted = 0
-
-    for _, row in df.iterrows():
-        caller = str(row["assigned_to"]).strip().lower()
-
-        if caller not in valid_callers:
-            continue
-
-        query_db("""
-            INSERT INTO leads (name, phone, assigned_to)
-            VALUES (%s, %s, %s)
-        """, (
-            str(row["name"]).strip(),
-            str(row["phone"]).strip(),
-            caller
-        ), fetch=False)
-
-        inserted += 1
-
-    return f"{inserted} leads uploaded successfully"
 
 # ================= ADMIN =================
 
@@ -196,7 +133,11 @@ def admin():
         WHERE u.role='manager'
     """)
 
-    return render_template("admin.html", states=states, managers=managers)
+    return render_template(
+        "admin.html",
+        states=states,
+        managers=managers
+    )
 
 @app.route("/create_manager", methods=["POST"])
 def create_manager():
@@ -222,20 +163,17 @@ def manager():
     if session.get("role") != "manager":
         return redirect("/login")
 
-    # CALLERS UNDER THIS MANAGER (STATE-WISE)
     callers = query_db("""
         SELECT username FROM users
         WHERE role='caller'
         AND state_id = (SELECT state_id FROM users WHERE id=%s)
     """, (session["user_id"],))
 
-    # LEADS
     leads = query_db("""
         SELECT name, phone, assigned_to, call_status
         FROM leads
     """)
 
-    # STATS (🔥 THIS WAS MISSING)
     stats = query_db("""
         SELECT
             COUNT(*) FILTER (WHERE call_status='pending'),
@@ -267,6 +205,56 @@ def create_caller():
     ), fetch=False)
 
     return redirect("/manager")
+
+@app.route("/upload_leads", methods=["POST"])
+def upload_leads():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return "No file selected"
+
+    try:
+        if file.filename.lower().endswith(".csv"):
+            df = pd.read_csv(file)
+        elif file.filename.lower().endswith(".xlsx"):
+            df = pd.read_excel(file)
+        else:
+            return "Only CSV or XLSX files allowed"
+    except Exception as e:
+        return f"File read error: {e}"
+
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+    if not {"name", "phone", "assigned_to"}.issubset(df.columns):
+        return "Required columns: name, phone, assigned_to"
+
+    valid_callers = [
+        r[0] for r in query_db("""
+            SELECT username FROM users
+            WHERE role='caller'
+            AND state_id=(SELECT state_id FROM users WHERE id=%s)
+        """, (session["user_id"],))
+    ]
+
+    inserted = 0
+    for _, row in df.iterrows():
+        if row["assigned_to"] not in valid_callers:
+            continue
+
+        query_db("""
+            INSERT INTO leads (name, phone, assigned_to)
+            VALUES (%s, %s, %s)
+        """, (
+            str(row["name"]).strip(),
+            str(row["phone"]).strip(),
+            str(row["assigned_to"]).strip()
+        ), fetch=False)
+
+        inserted += 1
+
+    return f"✅ {inserted} leads uploaded successfully"
 
 # ================= CALLER =================
 
