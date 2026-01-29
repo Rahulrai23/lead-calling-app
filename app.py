@@ -5,7 +5,11 @@
 import os
 import psycopg2
 import pandas as pd
-from flask import Flask, render_template, request, redirect, session, jsonify
+from io import BytesIO
+from flask import (
+    Flask, render_template, request,
+    redirect, session, jsonify, send_file
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -198,6 +202,32 @@ def create_caller():
 
     return redirect("/manager")
 
+# ================= EXCEL TEMPLATE =================
+
+@app.route("/download_template")
+def download_template():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    df = pd.DataFrame({
+        "name": ["Rahul Sharma"],
+        "phone": ["9876543210"],
+        "assigned_to": ["caller1"]
+    })
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Leads")
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="lead_upload_template.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # ================= UPLOAD LEADS =================
 
 @app.route("/upload_leads", methods=["POST"])
@@ -253,7 +283,7 @@ def upload_leads():
 
     return f"✅ {inserted} leads uploaded successfully"
 
-# ================= CALLER (LOCKED) =================
+# ================= CALLER (LOCKED FLOW) =================
 
 @app.route("/start_call/<int:lead_id>", methods=["POST"])
 def start_call(lead_id):
