@@ -1,30 +1,48 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>Admin Dashboard</title>
-</head>
+<head><title>Admin</title></head>
 <body>
 
-<h2>Admin Dashboard</h2>
-<a href="/logout">Logout</a>
+<h1>SUPER ADMIN DASHBOARD</h1>
+
+<h3>Create State</h3>
+<form method="POST">
+  <input name="state" required>
+  <button>Add State</button>
+</form>
+
+<h3>Existing States</h3>
+<ul>
+{% for s in states %}
+  <li>{{ s[1] }}</li>
+{% endfor %}
+</ul>
 
 <hr>
 
 <h3>Create Manager</h3>
 <form method="POST" action="/create_manager">
-  <input name="username" placeholder="Manager username" required>
-  <input name="password" type="password" placeholder="Password" required>
+  <input name="username" placeholder="Username" required>
+  <input name="password" type="password" required>
+
+  <select name="state_id" required>
+    <option value="">-- Select State --</option>
+    {% for s in states %}
+      <option value="{{ s[0] }}">{{ s[1] }}</option>
+    {% endfor %}
+  </select>
+
   <button>Create Manager</button>
 </form>
 
-<hr>
-
-<h3>Existing Managers</h3>
+<h3>Managers</h3>
 <ul>
 {% for m in managers %}
-  <li>{{ m[1] }}</li>
+  <li>{{ m[0] }} — {{ m[1] }}</li>
 {% endfor %}
 </ul>
+
+<a href="/logout">Logout</a>
 
 </body>
 </html>
