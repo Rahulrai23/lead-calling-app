@@ -1,11 +1,11 @@
 # =========================================================
-# LEAD CALLING APP – MANAGER → CALLER (PRODUCTION STABLE)
+# LEAD CALLING APP – MANAGER → CALLER (FINAL STABLE)
 # =========================================================
 
 import os
 import psycopg2
 import pandas as pd
-from flask import Flask, render_template, request, redirect, session
+from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # =========================================================
@@ -36,16 +36,16 @@ def query_db(query, params=None, fetch=True):
 
 
 # =========================================================
-# DATABASE INITIALIZATION (SAFE)
+# DATABASE INITIALIZATION (SAFE & IDPOTENT)
 # =========================================================
 
 def init_db():
     query_db("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE,
-            password TEXT,
-            role TEXT
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL
         )
     """, fetch=False)
 
@@ -57,7 +57,6 @@ def init_db():
             assigned_to TEXT,
             call_status TEXT DEFAULT 'pending',
             remarks TEXT,
-            call_attempt_time TIMESTAMP,
             call_start_time TIMESTAMP,
             call_end_time TIMESTAMP,
             call_duration INTEGER,
@@ -65,6 +64,18 @@ def init_db():
             reassigned_count INTEGER DEFAULT 0
         )
     """, fetch=False)
+
+
+# =========================================================
+# DIAGNOSTIC ROUTE (KEEP THIS)
+# =========================================================
+
+@app.route("/whoami")
+def whoami():
+    return jsonify({
+        "username": session.get("username"),
+        "role": session.get("role")
+    })
 
 
 # =========================================================
@@ -79,17 +90,21 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"].strip()
-        password = request.form["password"]
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
 
         user = query_db(
             "SELECT username, password, role FROM users WHERE username=%s",
             (username,)
         )
 
-        if not user or not check_password_hash(user[0][1], password):
+        if not user:
             return render_template("login.html", error="Invalid credentials")
 
+        if not check_password_hash(user[0][1], password):
+            return render_template("login.html", error="Invalid credentials")
+
+        session.clear()
         session["username"] = user[0][0]
         session["role"] = user[0][2]
 
@@ -105,16 +120,10 @@ def login():
 def logout():
     session.clear()
     return redirect("/login")
-@app.route("/hard_reset_db")
-def hard_reset_db():
-    query_db("DROP TABLE IF EXISTS leads CASCADE", fetch=False)
-    query_db("DROP TABLE IF EXISTS users CASCADE", fetch=False)
-    init_db()
-    return "DATABASE RESET COMPLETED"
 
 
 # =========================================================
-# ADMIN / MANAGER SEED
+# ADMIN / MANAGER SEED (ONE-TIME)
 # =========================================================
 
 @app.route("/create_admin")
@@ -129,6 +138,14 @@ def create_admin():
     """, ("admin", hashed), fetch=False)
 
     return "Admin created → admin / admin123"
+
+
+@app.route("/hard_reset_db")
+def hard_reset_db():
+    query_db("DROP TABLE IF EXISTS leads CASCADE", fetch=False)
+    query_db("DROP TABLE IF EXISTS users CASCADE", fetch=False)
+    init_db()
+    return "DATABASE RESET COMPLETED"
 
 
 # =========================================================
@@ -170,8 +187,8 @@ def create_caller():
     if session.get("role") != "manager":
         return redirect("/login")
 
-    username = request.form["username"].strip()
-    password = request.form["password"].strip()
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
 
     if not username or not password:
         return "Username and password required"
@@ -199,7 +216,7 @@ def upload_csv():
 
     required = {"name", "phone", "assigned_to"}
     if not required.issubset(df.columns):
-        return f"CSV must contain columns {required}"
+        return "CSV must contain name, phone, assigned_to"
 
     valid_callers = [
         c[0].lower() for c in query_db(
@@ -237,7 +254,7 @@ def reassign_leads():
     stale = query_db("""
         SELECT id FROM leads
         WHERE call_status='pending'
-          AND (call_start_time IS NULL)
+          AND call_start_time IS NULL
           AND created_at < NOW() - INTERVAL '24 HOURS'
     """)
 
@@ -255,18 +272,6 @@ def reassign_leads():
 # =========================================================
 # CALLER ROUTES
 # =========================================================
-
-@app.route("/caller")
-def caller_home():
-    if session.get("role") != "caller":
-        return redirect("/login")
-
-    callers = query_db("""
-        SELECT DISTINCT assigned_to FROM leads ORDER BY assigned_to
-    """)
-
-    return render_template("caller_home.html", callers=callers)
-
 
 @app.route("/caller/<caller_name>")
 def caller_page(caller_name):
@@ -290,10 +295,10 @@ def start_call(lead_id):
     query_db("""
         UPDATE leads
         SET call_start_time = NOW()
-        WHERE id = %s
+        WHERE id=%s
     """, (lead_id,), fetch=False)
 
-    return {"status": "started"}
+    return jsonify({"status": "started"})
 
 
 @app.route("/submit", methods=["POST"])
@@ -318,9 +323,9 @@ def submit():
         SET
             call_end_time = NOW(),
             call_duration = EXTRACT(EPOCH FROM (NOW() - call_start_time))::INT,
-            remarks = %s,
-            call_status = 'completed'
-        WHERE id = %s
+            remarks=%s,
+            call_status='completed'
+        WHERE id=%s
     """, (remarks, lead_id), fetch=False)
 
     return redirect(f"/caller/{caller_name}")
