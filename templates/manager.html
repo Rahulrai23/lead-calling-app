@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html>
-<head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manager Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
+
   <style>
     .progress-container {
       width: 100%;
-      background: #eee;
-      border-radius: 5px;
+      background: #e0e0e0;
+      border-radius: 6px;
       overflow: hidden;
-      margin-top: 10px;
+      margin-top: 12px;
       display: none;
     }
     .progress-bar {
@@ -20,9 +22,20 @@
       color: white;
       font-size: 12px;
       line-height: 18px;
+      transition: width 0.2s ease;
+    }
+    .download-link {
+      display: inline-block;
+      margin-bottom: 10px;
+      font-weight: bold;
+      text-decoration: none;
+    }
+    .download-link:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
+
 <body>
 
 <div class="navbar">
@@ -59,10 +72,9 @@
     <h3>Upload Leads (CSV / XLSX)</h3>
 
     <!-- TEMPLATE DOWNLOAD -->
-    <p>
-      <a href="/download_template">⬇ Download Excel Template</a>
-
-    </p>
+    <a class="download-link" href="/download_template">
+      ⬇ Download Excel Template
+    </a>
 
     <form id="uploadForm" enctype="multipart/form-data">
       <input type="file" name="file" accept=".csv,.xlsx" required>
@@ -80,7 +92,7 @@
   <!-- LEADS TABLE -->
   <div class="card">
     <h3>All Leads</h3>
-    <table border="1" width="100%">
+    <table width="100%">
       <tr>
         <th>Name</th>
         <th>Phone</th>
@@ -97,7 +109,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="4">No leads found</td>
+        <td colspan="4" style="text-align:center;">No leads found</td>
       </tr>
       {% endfor %}
     </table>
@@ -109,7 +121,8 @@
 document.getElementById("uploadForm").addEventListener("submit", function(e) {
   e.preventDefault();
 
-  const formData = new FormData(this);
+  const form = this;
+  const formData = new FormData(form);
   const xhr = new XMLHttpRequest();
 
   const progressContainer = document.getElementById("progressContainer");
@@ -121,21 +134,24 @@ document.getElementById("uploadForm").addEventListener("submit", function(e) {
   progressBar.innerText = "0%";
   result.innerText = "";
 
-  xhr.upload.addEventListener("progress", function(e) {
+  xhr.upload.onprogress = function(e) {
     if (e.lengthComputable) {
       const percent = Math.round((e.loaded / e.total) * 100);
       progressBar.style.width = percent + "%";
       progressBar.innerText = percent + "%";
     }
-  });
+  };
 
   xhr.onload = function() {
-    result.innerText = xhr.responseText;
+    result.innerText = xhr.responseText || "Upload completed";
+    progressBar.style.width = "100%";
+    progressBar.innerText = "100%";
+
     setTimeout(() => location.reload(), 1200);
   };
 
   xhr.onerror = function() {
-    result.innerText = "❌ Upload failed";
+    result.innerText = "❌ Upload failed. Please try again.";
   };
 
   xhr.open("POST", "/upload_leads", true);
