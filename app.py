@@ -154,6 +154,36 @@ def manager():
         callers=callers,
         stats=stats[0]
     )
+query_db("""
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS reassigned_count INTEGER DEFAULT 0
+""", fetch=False)
+@app.route("/reassign_leads", methods=["POST"])
+def reassign_leads():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    new_caller = request.form["caller"]
+
+    # Get stale leads (24 hrs, untouched)
+    leads = query_db("""
+        SELECT id FROM leads
+        WHERE call_status = 'pending'
+          AND (call_start_time IS NULL OR call_duration IS NULL)
+          AND created_at < NOW() - INTERVAL '24 HOURS'
+    """)
+
+    for lead in leads:
+        query_db("""
+            UPDATE leads
+            SET
+                assigned_to = %s,
+                reassigned_count = reassigned_count + 1
+            WHERE id = %s
+        """, (new_caller, lead[0]), fetch=False)
+
+    return redirect("/manager")
 
 
 @app.route("/create_caller", methods=["POST"])
