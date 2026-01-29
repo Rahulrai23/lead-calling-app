@@ -169,8 +169,8 @@ def manager():
 
     stats = query_db("""
         SELECT
-            COUNT(*) FILTER (WHERE call_status='pending') AS pending,
-            COUNT(*) FILTER (WHERE call_status='completed') AS completed
+            SUM(CASE WHEN call_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+            SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) AS completed
         FROM leads
     """)
 
