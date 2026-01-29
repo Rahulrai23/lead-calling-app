@@ -8,20 +8,13 @@ import pandas as pd
 from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# =========================================================
-# APP CONFIG
-# =========================================================
-
 app = Flask(__name__)
 app.secret_key = "super-secret-key-change-this"
 
-# =========================================================
-# DATABASE HELPERS
-# =========================================================
+# ---------------- DB HELPERS ----------------
 
 def get_db():
     return psycopg2.connect(os.environ.get("DATABASE_URL"))
-
 
 def query_db(query, params=None, fetch=True):
     conn = get_db()
@@ -34,10 +27,7 @@ def query_db(query, params=None, fetch=True):
     conn.close()
     return result
 
-
-# =========================================================
-# DATABASE INITIALIZATION (SAFE & IDPOTENT)
-# =========================================================
+# ---------------- INIT DB ----------------
 
 def init_db():
     query_db("""
@@ -65,10 +55,7 @@ def init_db():
         )
     """, fetch=False)
 
-
-# =========================================================
-# DIAGNOSTIC ROUTE (KEEP THIS)
-# =========================================================
+# ---------------- DIAGNOSTIC ----------------
 
 @app.route("/whoami")
 def whoami():
@@ -77,15 +64,11 @@ def whoami():
         "role": session.get("role")
     })
 
-
-# =========================================================
-# AUTH ROUTES
-# =========================================================
+# ---------------- AUTH ----------------
 
 @app.route("/")
 def home():
     return redirect("/login")
-
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -98,10 +81,7 @@ def login():
             (username,)
         )
 
-        if not user:
-            return render_template("login.html", error="Invalid credentials")
-
-        if not check_password_hash(user[0][1], password):
+        if not user or not check_password_hash(user[0][1], password):
             return render_template("login.html", error="Invalid credentials")
 
         session.clear()
@@ -115,30 +95,22 @@ def login():
 
     return render_template("login.html")
 
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
-
-# =========================================================
-# ADMIN / MANAGER SEED (ONE-TIME)
-# =========================================================
+# ---------------- ADMIN SEED ----------------
 
 @app.route("/create_admin")
 def create_admin():
-    hashed = generate_password_hash("admin123")
-
     query_db("DELETE FROM users WHERE username='admin'", fetch=False)
-
-    query_db("""
-        INSERT INTO users (username, password, role)
-        VALUES (%s, %s, 'manager')
-    """, ("admin", hashed), fetch=False)
-
+    query_db(
+        "INSERT INTO users (username, password, role) VALUES (%s,%s,'manager')",
+        ("admin", generate_password_hash("admin123")),
+        fetch=False
+    )
     return "Admin created → admin / admin123"
-
 
 @app.route("/hard_reset_db")
 def hard_reset_db():
@@ -147,10 +119,7 @@ def hard_reset_db():
     init_db()
     return "DATABASE RESET COMPLETED"
 
-
-# =========================================================
-# MANAGER ROUTES
-# =========================================================
+# ---------------- MANAGER ----------------
 
 @app.route("/manager")
 def manager():
@@ -158,120 +127,46 @@ def manager():
         return redirect("/login")
 
     leads = query_db("""
-        SELECT id, name, phone, assigned_to, call_status, remarks, call_duration
+        SELECT id, name, phone, assigned_to, call_status, remarks, call_duration, reassigned_count
         FROM leads
         ORDER BY id DESC
     """)
 
-    callers = query_db("""
-        SELECT username FROM users WHERE role='caller'
-    """)
+    callers = query_db("SELECT username FROM users WHERE role='caller'")
 
     stats = query_db("""
         SELECT
-            SUM(CASE WHEN call_status = 'pending' THEN 1 ELSE 0 END) AS pending,
-            SUM(CASE WHEN call_status = 'completed' THEN 1 ELSE 0 END) AS completed
+            SUM(CASE WHEN call_status='pending' THEN 1 ELSE 0 END),
+            SUM(CASE WHEN call_status='completed' THEN 1 ELSE 0 END)
         FROM leads
     """)
+
+    stats = stats[0] if stats else (0, 0)
 
     return render_template(
         "manager.html",
         leads=leads,
         callers=callers,
-        stats=stats[0]
+        stats=stats
     )
-
 
 @app.route("/create_caller", methods=["POST"])
 def create_caller():
     if session.get("role") != "manager":
         return redirect("/login")
 
-    username = request.form.get("username", "").strip()
-    password = request.form.get("password", "").strip()
-
-    if not username or not password:
-        return "Username and password required"
+    username = request.form["username"].strip()
+    password = request.form["password"].strip()
 
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'caller')
-        ON CONFLICT (username) DO NOTHING
+        ON CONFLICT DO NOTHING
     """, (username, generate_password_hash(password)), fetch=False)
 
     return redirect("/manager")
 
-
-@app.route("/upload_csv", methods=["POST"])
-def upload_csv():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    file = request.files.get("file")
-    if not file or file.filename == "":
-        return "No file selected"
-
-    df = pd.read_csv(file)
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-    required = {"name", "phone", "assigned_to"}
-    if not required.issubset(df.columns):
-        return "CSV must contain name, phone, assigned_to"
-
-    valid_callers = [
-        c[0].lower() for c in query_db(
-            "SELECT username FROM users WHERE role='caller'"
-        )
-    ]
-
-    inserted = 0
-
-    for _, row in df.iterrows():
-        if row["assigned_to"].strip().lower() not in valid_callers:
-            continue
-
-        query_db("""
-            INSERT INTO leads (name, phone, assigned_to)
-            VALUES (%s, %s, %s)
-        """, (
-            row["name"].strip(),
-            str(row["phone"]).strip(),
-            row["assigned_to"].strip()
-        ), fetch=False)
-
-        inserted += 1
-
-    return f"{inserted} leads uploaded successfully"
-
-
-@app.route("/reassign_leads", methods=["POST"])
-def reassign_leads():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    new_caller = request.form["caller"]
-
-    stale = query_db("""
-        SELECT id FROM leads
-        WHERE call_status='pending'
-          AND call_start_time IS NULL
-          AND created_at < NOW() - INTERVAL '24 HOURS'
-    """)
-
-    for lead in stale:
-        query_db("""
-            UPDATE leads
-            SET assigned_to=%s,
-                reassigned_count=reassigned_count+1
-            WHERE id=%s
-        """, (new_caller, lead[0]), fetch=False)
-
-    return redirect("/manager")
-
-
-# =========================================================
-# CALLER ROUTES
-# =========================================================
+# ---------------- CALLER ----------------
 
 @app.route("/caller/<caller_name>")
 def caller_page(caller_name):
@@ -286,43 +181,22 @@ def caller_page(caller_name):
 
     return render_template("caller.html", leads=leads, caller_name=caller_name)
 
-
 @app.route("/start_call/<int:lead_id>", methods=["POST"])
 def start_call(lead_id):
-    if session.get("role") != "caller":
-        return redirect("/login")
-
-    query_db("""
-        UPDATE leads
-        SET call_start_time = NOW()
-        WHERE id=%s
-    """, (lead_id,), fetch=False)
-
+    query_db("UPDATE leads SET call_start_time=NOW() WHERE id=%s", (lead_id,), fetch=False)
     return jsonify({"status": "started"})
-
 
 @app.route("/submit", methods=["POST"])
 def submit():
-    if session.get("role") != "caller":
-        return redirect("/login")
-
     lead_id = request.form["lead_id"]
     remarks = request.form["remarks"]
     caller_name = request.form["caller_name"]
 
-    start = query_db(
-        "SELECT call_start_time FROM leads WHERE id=%s",
-        (lead_id,)
-    )
-
-    if not start or not start[0][0]:
-        return "Start call first"
-
     query_db("""
         UPDATE leads
         SET
-            call_end_time = NOW(),
-            call_duration = EXTRACT(EPOCH FROM (NOW() - call_start_time))::INT,
+            call_end_time=NOW(),
+            call_duration=EXTRACT(EPOCH FROM (NOW()-call_start_time))::INT,
             remarks=%s,
             call_status='completed'
         WHERE id=%s
@@ -330,12 +204,8 @@ def submit():
 
     return redirect(f"/caller/{caller_name}")
 
-
-# =========================================================
-# START APP
-# =========================================================
+# ---------------- START ----------------
 
 if __name__ == "__main__":
     init_db()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
