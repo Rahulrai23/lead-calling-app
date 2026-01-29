@@ -1,57 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Caller Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
 <body>
 
-<a href="/logout">Logout</a>
-<hr>
-
-<h2>My Assigned Leads</h2>
-<!-- caller leads table -->
-<h1>Caller Dashboard</h1>
-<p>Welcome, {{ caller_name }}</p>
-<a href="/logout">Logout</a>
-
-<hr>
-
-{% for lead in leads %}
-<div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
-  <p><b>Name:</b> {{ lead[1] }}</p>
-  <p><b>Phone:</b> <a href="tel:{{ lead[2] }}">{{ lead[2] }}</a></p>
-
-  <form method="POST" action="/start_call/{{ lead[0] }}">
-    <button type="submit">📞 Start Call</button>
-  </form>
-
-  <form method="POST" action="/submit">
-    <input type="hidden" name="lead_id" value="{{ lead[0] }}">
-    <input type="hidden" name="caller_name" value="{{ caller_name }}">
-    <textarea name="remarks" placeholder="Call remarks" required></textarea>
-    <br>
-    <button type="submit">Submit</button>
-  </form>
+<div class="navbar">
+  Caller Dashboard
+  <a href="/logout" style="float:right;">Logout</a>
 </div>
-{% else %}
-<p>No pending leads 🎉</p>
-{% endfor %}
 
-{% if leads %}
-<table border="1">
-  <tr>
-    <th>Name</th>
-    <th>Phone</th>
-    <th>Action</th>
-  </tr>
+<div class="container">
 
   {% for lead in leads %}
-  <tr>
-    <td>{{ lead[1] }}</td>
-    <td>
-      <a href="tel:{{ lead[2] }}">Call</a>
-    </td>
-    <td>
-      <!-- remarks form -->
-    </td>
-  </tr>
+  <div class="card">
+    <p><b>Name:</b> {{ lead[1] }}</p>
+    <p><b>Phone:</b> <a href="tel:{{ lead[2] }}">{{ lead[2] }}</a></p>
+
+    <form method="POST" action="/start_call/{{ lead[0] }}">
+      <button class="primary">📞 Start Call</button>
+    </form>
+
+    <form method="POST" action="/submit">
+      <input type="hidden" name="lead_id" value="{{ lead[0] }}">
+      <input type="hidden" name="caller_name" value="{{ caller_name }}">
+      <textarea name="remarks" placeholder="Call remarks" required></textarea>
+      <button class="success">Submit</button>
+    </form>
+  </div>
+  {% else %}
+    <p>No pending leads 🎉</p>
   {% endfor %}
-</table>
-{% else %}
-<p><b>No pending leads assigned to you.</b></p>
-{% endif %}
+
+</div>
+</body>
+</html>
