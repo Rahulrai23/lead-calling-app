@@ -120,6 +120,15 @@ def create_admin():
     """, ("admin", password), fetch=False)
 
     return "Admin RESET → admin / admin123"
+@app.route("/fix_admin_password")
+def fix_admin_password():
+    hashed = generate_password_hash("admin123")
+    query_db("""
+        UPDATE users
+        SET password = %s
+        WHERE username = 'admin'
+    """, (hashed,), fetch=False)
+    return "Admin password fixed"
 
 
 # =========================================================
