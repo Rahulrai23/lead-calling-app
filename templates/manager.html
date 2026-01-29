@@ -34,6 +34,14 @@
       <button>Create Caller</button>
     </form>
   </div>
+<!-- UPLOAD LEADS -->
+<div class="card">
+  <h3>Upload Leads (CSV / XLSX)</h3>
+  <form method="POST" action="/upload_leads" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".csv,.xlsx" required>
+    <button>Upload</button>
+  </form>
+</div>
 
   <!-- LEADS TABLE -->
   <div class="card">
