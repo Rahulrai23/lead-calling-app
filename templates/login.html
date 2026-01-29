@@ -1,14 +1,26 @@
 <!DOCTYPE html>
 <html>
+<head>
+  <title>Login</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
 <body>
 
-<h1>LOGIN TEST</h1>
+<div class="container">
+  <div class="card" style="max-width:400px;margin:auto;margin-top:100px;">
+    <h2>Login</h2>
 
-<form method="POST" action="/login">
-  <input name="username" placeholder="username">
-  <input name="password" type="password" placeholder="password">
-  <button type="submit">LOGIN</button>
-</form>
+    {% if error %}
+      <p style="color:red;">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST">
+      <input name="username" placeholder="Username" required>
+      <input name="password" type="password" placeholder="Password" required>
+      <button class="primary" type="submit">Login</button>
+    </form>
+  </div>
+</div>
 
 </body>
 </html>
