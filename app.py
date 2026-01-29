@@ -216,12 +216,15 @@ def upload_leads():
         return "No file selected"
 
     try:
-        if file.filename.lower().endswith(".csv"):
-            df = pd.read_csv(file)
-        elif file.filename.lower().endswith(".xlsx"):
-            df = pd.read_excel(file)
-        else:
-            return "Only CSV or XLSX files allowed"
+       if filename.endswith(".csv"):
+    df = pd.read_csv(file)
+
+elif filename.endswith(".xlsx"):
+    df = pd.read_excel(file, engine="openpyxl")
+
+else:
+    return "Only CSV or XLSX files allowed"
+
     except Exception as e:
         return f"File read error: {e}"
 
