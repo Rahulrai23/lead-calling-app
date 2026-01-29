@@ -1,116 +1,134 @@
-/* ===== GLOBAL ===== */
+/* ===== RESET ===== */
+* {
+  box-sizing: border-box;
+  font-family: Arial, sans-serif;
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  background: #f4f6f9;
   margin: 0;
-  padding: 0;
+  background: #f5f6fa;
 }
 
+/* ===== NAVBAR ===== */
+.navbar {
+  background: #2c3e50;
+  color: #fff;
+  padding: 12px 16px;
+  font-size: 18px;
+}
+
+.navbar a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+/* ===== CONTAINER ===== */
 .container {
-  max-width: 1100px;
-  margin: auto;
-  padding: 20px;
+  padding: 12px;
 }
 
-h1, h2, h3 {
-  margin-top: 0;
-}
-
-/* ===== CARD ===== */
+/* ===== CARDS ===== */
 .card {
-  background: #ffffff;
-  padding: 20px;
+  background: #fff;
+  padding: 15px;
+  margin-bottom: 15px;
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-/* ===== BUTTONS ===== */
+/* ===== STATS ===== */
+.stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.stat-box {
+  flex: 1;
+  background: #3498db;
+  color: #fff;
+  text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.stat-box:nth-child(2) {
+  background: #27ae60;
+}
+
+.stat-box h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+/* ===== FORMS ===== */
+input, textarea, select {
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+  font-size: 16px;
+}
+
 button {
-  padding: 8px 14px;
+  width: 100%;
+  padding: 12px;
+  background: #2980b9;
+  color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
+  font-size: 16px;
   cursor: pointer;
 }
 
-.primary {
-  background: #0d6efd;
-  color: #fff;
-}
-
-.success {
-  background: #198754;
-  color: #fff;
-}
-
-.danger {
-  background: #dc3545;
-  color: #fff;
-}
-
 button:hover {
-  opacity: 0.9;
+  background: #1f6391;
 }
 
-/* ===== INPUTS ===== */
-input, textarea {
-  width: 100%;
-  padding: 8px;
-  margin: 6px 0;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-
-textarea {
-  resize: vertical;
-}
-
-/* ===== TABLE ===== */
+/* ===== TABLE (DESKTOP) ===== */
 table {
   width: 100%;
   border-collapse: collapse;
 }
 
 th, td {
-  padding: 10px;
+  padding: 8px;
   border-bottom: 1px solid #ddd;
-  text-align: left;
 }
 
-th {
-  background: #f0f0f0;
-}
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
 
-/* ===== NAVBAR ===== */
-.navbar {
-  background: #0d6efd;
-  color: white;
-  padding: 15px;
-}
+  /* STACK STATS */
+  .stats {
+    flex-direction: column;
+  }
 
-.navbar a {
-  color: white;
-  text-decoration: none;
-  margin-right: 15px;
-  font-weight: bold;
-}
+  /* TABLE → CARD */
+  table, thead, tbody, th, tr {
+    display: block;
+  }
 
-/* ===== STATS ===== */
-.stats {
-  display: flex;
-  gap: 20px;
-}
+  thead {
+    display: none;
+  }
 
-.stat-box {
-  flex: 1;
-  background: #ffffff;
-  padding: 15px;
-  border-radius: 8px;
-  text-align: center;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-}
+  tr {
+    background: #fff;
+    margin-bottom: 12px;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
 
-.stat-box h3 {
-  margin: 0;
-  font-size: 22px;
+  td {
+    border: none;
+    padding: 6px 0;
+  }
+
+  td::before {
+    font-weight: bold;
+    display: block;
+    color: #555;
+  }
 }
