@@ -103,6 +103,17 @@ def logout():
     session.clear()
     return redirect("/login")
 
+@app.route("/debug_admin")
+def debug_admin():
+    user = query_db(
+        "SELECT id, username, password, role FROM users WHERE username='admin'"
+    )
+
+    return {
+        "exists": bool(user),
+        "row": user[0] if user else None,
+        "password_type": type(user[0][2]).__name__ if user else None
+    }
 
 # =========================================================
 # INITIAL MANAGER (ONE-TIME)
