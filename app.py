@@ -98,6 +98,71 @@ def whoami():
         "username": session.get("username"),
         "role": session.get("role")
     })
+@app.route("/upload_leads", methods=["POST"])
+def upload_leads():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return "No file selected"
+
+    filename = file.filename.lower()
+
+    # Read CSV or Excel safely
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(file)
+        elif filename.endswith(".xlsx"):
+            df = pd.read_excel(file)
+        else:
+            return "Only CSV or XLSX files allowed"
+    except Exception as e:
+        return f"File read error: {e}"
+
+    # Normalize columns
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_")
+    )
+
+    required = {"name", "phone", "assigned_to"}
+    if not required.issubset(df.columns):
+        return "File must contain columns: name, phone, assigned_to"
+
+    # Fetch valid callers (same state as manager)
+    valid_callers = [
+        c[0].lower() for c in query_db("""
+            SELECT username FROM users
+            WHERE role='caller'
+              AND state_id = (
+                  SELECT state_id FROM users WHERE id=%s
+              )
+        """, (session["user_id"],))
+    ]
+
+    inserted = 0
+
+    for _, row in df.iterrows():
+        caller = str(row["assigned_to"]).strip().lower()
+
+        if caller not in valid_callers:
+            continue
+
+        query_db("""
+            INSERT INTO leads (name, phone, assigned_to)
+            VALUES (%s, %s, %s)
+        """, (
+            str(row["name"]).strip(),
+            str(row["phone"]).strip(),
+            caller
+        ), fetch=False)
+
+        inserted += 1
+
+    return f"{inserted} leads uploaded successfully"
 
 # ================= ADMIN =================
 
