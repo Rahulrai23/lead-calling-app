@@ -159,6 +159,14 @@ def create_manager():
     """, (username, password, state_id), fetch=False)
 
     return redirect("/admin")
+@app.route("/db_fix_state")
+def db_fix_state():
+    query_db("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS state_id INTEGER;
+    """, fetch=False)
+
+    return "users.state_id column added (safe)"
 
 # ================= MANAGER =================
 
