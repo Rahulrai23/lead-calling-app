@@ -16,6 +16,15 @@
   </select>
   <button>Reassign Uncalled Leads</button>
 </form>
+<th>Reassigned</th>
+
+<td>
+  {% if l.reassigned_count > 0 %}
+    🔁 {{ l.reassigned_count }}
+  {% else %}
+    —
+  {% endif %}
+</td>
 
 <div class="navbar">
   Manager Dashboard
