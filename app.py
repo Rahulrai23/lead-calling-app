@@ -26,10 +26,7 @@ def query_db(query, params=None, fetch=True):
     conn.close()
     return result
 
-# ================= INIT + AUTO FIX =================
-
 def init_db():
-    # STATES
     query_db("""
         CREATE TABLE IF NOT EXISTS states (
             id SERIAL PRIMARY KEY,
@@ -37,23 +34,16 @@ def init_db():
         )
     """, fetch=False)
 
-    # USERS
     query_db("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL
+            role TEXT NOT NULL,
+            state_id INTEGER REFERENCES states(id)
         )
     """, fetch=False)
 
-    # ADD state_id SAFELY (this is the key fix)
-    query_db("""
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS state_id INTEGER
-    """, fetch=False)
-
-    # LEADS
     query_db("""
         CREATE TABLE IF NOT EXISTS leads (
             id SERIAL PRIMARY KEY,
@@ -73,8 +63,8 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        u = request.form.get("username", "").strip()
-        p = request.form.get("password", "")
+        u = request.form["username"].strip()
+        p = request.form["password"]
 
         user = query_db(
             "SELECT id, password, role FROM users WHERE username=%s",
@@ -114,12 +104,10 @@ def whoami():
 @app.route("/create_admin")
 def create_admin():
     query_db("DELETE FROM users WHERE username='admin'", fetch=False)
-
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'admin')
     """, ("admin", generate_password_hash("admin123")), fetch=False)
-
     return "Admin created → admin / admin123"
 
 @app.route("/admin", methods=["GET", "POST"])
@@ -127,31 +115,23 @@ def admin():
     if session.get("role") != "admin":
         return redirect("/login")
 
-    # CREATE STATE
     if request.method == "POST":
-        state = request.form.get("state", "").strip()
-        if state:
-            query_db(
-                "INSERT INTO states (name) VALUES (%s) ON CONFLICT DO NOTHING",
-                (state,),
-                fetch=False
-            )
+        state = request.form["state"].strip()
+        query_db(
+            "INSERT INTO states (name) VALUES (%s) ON CONFLICT DO NOTHING",
+            (state,),
+            fetch=False
+        )
 
     states = query_db("SELECT id, name FROM states")
-
-    # SAFE JOIN (NO CRASH)
     managers = query_db("""
-        SELECT u.username, COALESCE(s.name, '—')
+        SELECT u.username, s.name
         FROM users u
-        LEFT JOIN states s ON u.state_id = s.id
+        JOIN states s ON u.state_id = s.id
         WHERE u.role='manager'
     """)
 
-    return render_template(
-        "admin.html",
-        states=states,
-        managers=managers
-    )
+    return render_template("admin.html", states=states, managers=managers)
 
 @app.route("/create_manager", methods=["POST"])
 def create_manager():
@@ -163,7 +143,7 @@ def create_manager():
         VALUES (%s, %s, 'manager', %s)
         ON CONFLICT (username) DO NOTHING
     """, (
-        request.form["username"].strip(),
+        request.form["username"],
         generate_password_hash(request.form["password"]),
         request.form["state_id"]
     ), fetch=False)
@@ -177,21 +157,32 @@ def manager():
     if session.get("role") != "manager":
         return redirect("/login")
 
+    # CALLERS UNDER THIS MANAGER (STATE-WISE)
     callers = query_db("""
         SELECT username FROM users
         WHERE role='caller'
-          AND state_id = (SELECT state_id FROM users WHERE id=%s)
+        AND state_id = (SELECT state_id FROM users WHERE id=%s)
     """, (session["user_id"],))
 
+    # LEADS
     leads = query_db("""
         SELECT name, phone, assigned_to, call_status
+        FROM leads
+    """)
+
+    # STATS (🔥 THIS WAS MISSING)
+    stats = query_db("""
+        SELECT
+            COUNT(*) FILTER (WHERE call_status='pending'),
+            COUNT(*) FILTER (WHERE call_status='completed')
         FROM leads
     """)
 
     return render_template(
         "manager.html",
         callers=callers,
-        leads=leads
+        leads=leads,
+        stats=stats[0]
     )
 
 @app.route("/create_caller", methods=["POST"])
@@ -204,9 +195,8 @@ def create_caller():
         VALUES (%s, %s, 'caller',
             (SELECT state_id FROM users WHERE id=%s)
         )
-        ON CONFLICT (username) DO NOTHING
     """, (
-        request.form["username"].strip(),
+        request.form["username"],
         generate_password_hash(request.form["password"]),
         session["user_id"]
     ), fetch=False)
@@ -226,11 +216,7 @@ def caller(caller_name):
         WHERE assigned_to=%s AND call_status='pending'
     """, (caller_name,))
 
-    return render_template(
-        "caller.html",
-        leads=leads,
-        caller_name=caller_name
-    )
+    return render_template("caller.html", leads=leads, caller_name=caller_name)
 
 # ================= START =================
 
