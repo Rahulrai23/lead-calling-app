@@ -1,5 +1,5 @@
 # =========================================================
-# LEAD CALLING APP – ADMIN → MANAGER → CALLER (FINAL WORKING)
+# LEAD CALLING APP – ADMIN → MANAGER → CALLER (FINAL LOCKED)
 # =========================================================
 
 import os
@@ -51,7 +51,10 @@ def init_db():
             name TEXT,
             phone TEXT,
             assigned_to TEXT,
-            call_status TEXT DEFAULT 'pending'
+            call_status TEXT DEFAULT 'pending',
+            remarks TEXT,
+            call_start_time TIMESTAMP,
+            call_end_time TIMESTAMP
         )
     """, fetch=False)
 
@@ -93,13 +96,6 @@ def login():
 def logout():
     session.clear()
     return redirect("/login")
-
-@app.route("/whoami")
-def whoami():
-    return jsonify({
-        "username": session.get("username"),
-        "role": session.get("role")
-    })
 
 # ================= ADMIN =================
 
@@ -202,7 +198,7 @@ def create_caller():
 
     return redirect("/manager")
 
-# ================= UPLOAD LEADS (FIXED) =================
+# ================= UPLOAD LEADS =================
 
 @app.route("/upload_leads", methods=["POST"])
 def upload_leads():
@@ -218,23 +214,18 @@ def upload_leads():
     try:
         if filename.endswith(".csv"):
             df = pd.read_csv(file)
-
         elif filename.endswith(".xlsx"):
             df = pd.read_excel(file, engine="openpyxl")
-
         else:
             return "Only CSV or XLSX files allowed"
-
     except Exception as e:
         return f"File read error: {e}"
 
-    # Normalize columns
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     if not {"name", "phone", "assigned_to"}.issubset(df.columns):
         return "Required columns: name, phone, assigned_to"
 
-    # Valid callers (case-insensitive)
     valid_callers = [
         r[0].lower() for r in query_db("""
             SELECT username FROM users
@@ -244,10 +235,8 @@ def upload_leads():
     ]
 
     inserted = 0
-
     for _, row in df.iterrows():
         caller = str(row["assigned_to"]).strip().lower()
-
         if caller not in valid_callers:
             continue
 
@@ -264,7 +253,46 @@ def upload_leads():
 
     return f"✅ {inserted} leads uploaded successfully"
 
-# ================= CALLER =================
+# ================= CALLER (LOCKED) =================
+
+@app.route("/start_call/<int:lead_id>", methods=["POST"])
+def start_call(lead_id):
+    if session.get("role") != "caller":
+        return redirect("/login")
+
+    query_db("""
+        UPDATE leads
+        SET call_start_time = NOW()
+        WHERE id=%s
+    """, (lead_id,), fetch=False)
+
+    return jsonify({"status": "started"})
+
+@app.route("/submit", methods=["POST"])
+def submit():
+    if session.get("role") != "caller":
+        return redirect("/login")
+
+    lead_id = request.form["lead_id"]
+    remarks = request.form["remarks"]
+    caller_name = request.form["caller_name"]
+
+    started = query_db("""
+        SELECT call_start_time FROM leads WHERE id=%s
+    """, (lead_id,))
+
+    if not started or not started[0][0]:
+        return "❌ Start Call before submitting remarks"
+
+    query_db("""
+        UPDATE leads
+        SET remarks=%s,
+            call_end_time=NOW(),
+            call_status='completed'
+        WHERE id=%s
+    """, (remarks, lead_id), fetch=False)
+
+    return redirect(f"/caller/{caller_name}")
 
 @app.route("/caller/<caller_name>")
 def caller(caller_name):
