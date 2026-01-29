@@ -1,10 +1,9 @@
 # =========================================================
-# LEAD CALLING APP – ADMIN → MANAGER → CALLER (FINAL)
+# LEAD CALLING APP – ADMIN → MANAGER → CALLER (FINAL WORKING)
 # =========================================================
 
 import os
 import psycopg2
-import pandas as pd
 from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -27,7 +26,10 @@ def query_db(query, params=None, fetch=True):
     conn.close()
     return result
 
+# ================= INIT + AUTO FIX =================
+
 def init_db():
+    # STATES
     query_db("""
         CREATE TABLE IF NOT EXISTS states (
             id SERIAL PRIMARY KEY,
@@ -35,27 +37,30 @@ def init_db():
         )
     """, fetch=False)
 
+    # USERS
     query_db("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            state_id INTEGER REFERENCES states(id)
+            role TEXT NOT NULL
         )
     """, fetch=False)
 
+    # ADD state_id SAFELY (this is the key fix)
+    query_db("""
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS state_id INTEGER
+    """, fetch=False)
+
+    # LEADS
     query_db("""
         CREATE TABLE IF NOT EXISTS leads (
             id SERIAL PRIMARY KEY,
             name TEXT,
             phone TEXT,
             assigned_to TEXT,
-            call_status TEXT DEFAULT 'pending',
-            remarks TEXT,
-            call_start_time TIMESTAMP,
-            call_end_time TIMESTAMP,
-            call_duration INTEGER
+            call_status TEXT DEFAULT 'pending'
         )
     """, fetch=False)
 
@@ -68,8 +73,8 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        u = request.form["username"].strip()
-        p = request.form["password"]
+        u = request.form.get("username", "").strip()
+        p = request.form.get("password", "")
 
         user = query_db(
             "SELECT id, password, role FROM users WHERE username=%s",
@@ -109,10 +114,12 @@ def whoami():
 @app.route("/create_admin")
 def create_admin():
     query_db("DELETE FROM users WHERE username='admin'", fetch=False)
+
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'admin')
     """, ("admin", generate_password_hash("admin123")), fetch=False)
+
     return "Admin created → admin / admin123"
 
 @app.route("/admin", methods=["GET", "POST"])
@@ -122,18 +129,21 @@ def admin():
 
     # CREATE STATE
     if request.method == "POST":
-        state = request.form["state"].strip()
-        query_db(
-            "INSERT INTO states (name) VALUES (%s) ON CONFLICT DO NOTHING",
-            (state,),
-            fetch=False
-        )
+        state = request.form.get("state", "").strip()
+        if state:
+            query_db(
+                "INSERT INTO states (name) VALUES (%s) ON CONFLICT DO NOTHING",
+                (state,),
+                fetch=False
+            )
 
     states = query_db("SELECT id, name FROM states")
+
+    # SAFE JOIN (NO CRASH)
     managers = query_db("""
-        SELECT u.username, s.name
+        SELECT u.username, COALESCE(s.name, '—')
         FROM users u
-        JOIN states s ON u.state_id = s.id
+        LEFT JOIN states s ON u.state_id = s.id
         WHERE u.role='manager'
     """)
 
@@ -148,25 +158,17 @@ def create_manager():
     if session.get("role") != "admin":
         return redirect("/login")
 
-    username = request.form["username"]
-    password = generate_password_hash(request.form["password"])
-    state_id = request.form["state_id"]
-
     query_db("""
         INSERT INTO users (username, password, role, state_id)
         VALUES (%s, %s, 'manager', %s)
         ON CONFLICT (username) DO NOTHING
-    """, (username, password, state_id), fetch=False)
+    """, (
+        request.form["username"].strip(),
+        generate_password_hash(request.form["password"]),
+        request.form["state_id"]
+    ), fetch=False)
 
     return redirect("/admin")
-@app.route("/db_fix_state")
-def db_fix_state():
-    query_db("""
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS state_id INTEGER;
-    """, fetch=False)
-
-    return "users.state_id column added (safe)"
 
 # ================= MANAGER =================
 
@@ -177,9 +179,8 @@ def manager():
 
     callers = query_db("""
         SELECT username FROM users
-        WHERE role='caller' AND state_id=(
-            SELECT state_id FROM users WHERE id=%s
-        )
+        WHERE role='caller'
+          AND state_id = (SELECT state_id FROM users WHERE id=%s)
     """, (session["user_id"],))
 
     leads = query_db("""
@@ -187,7 +188,11 @@ def manager():
         FROM leads
     """)
 
-    return render_template("manager.html", callers=callers, leads=leads)
+    return render_template(
+        "manager.html",
+        callers=callers,
+        leads=leads
+    )
 
 @app.route("/create_caller", methods=["POST"])
 def create_caller():
@@ -199,8 +204,9 @@ def create_caller():
         VALUES (%s, %s, 'caller',
             (SELECT state_id FROM users WHERE id=%s)
         )
+        ON CONFLICT (username) DO NOTHING
     """, (
-        request.form["username"],
+        request.form["username"].strip(),
         generate_password_hash(request.form["password"]),
         session["user_id"]
     ), fetch=False)
@@ -220,7 +226,11 @@ def caller(caller_name):
         WHERE assigned_to=%s AND call_status='pending'
     """, (caller_name,))
 
-    return render_template("caller.html", leads=leads, caller_name=caller_name)
+    return render_template(
+        "caller.html",
+        leads=leads,
+        caller_name=caller_name
+    )
 
 # ================= START =================
 
