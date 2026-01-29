@@ -56,6 +56,13 @@ def init_db():
             call_attempt_time TIMESTAMP
         )
     """, fetch=False)
+    query_db("""
+    ALTER TABLE leads
+    ADD COLUMN IF NOT EXISTS call_start_time TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS call_end_time TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS call_duration INTEGER
+""", fetch=False)
+
 
 # =========================================================
 # AUTH ROUTES
@@ -240,6 +247,19 @@ def start_call(lead_id):
     """, (lead_id,), fetch=False)
 
     return {"status": "started"}
+    
+@app.route("/start_call/<int:lead_id>", methods=["POST"])
+def start_call(lead_id):
+    if session.get("role") != "caller":
+        return redirect("/login")
+
+    query_db("""
+        UPDATE leads
+        SET call_start_time = NOW()
+        WHERE id = %s
+    """, (lead_id,), fetch=False)
+
+    return redirect(request.referrer)
 
 @app.route("/caller/<caller_name>")
 def caller_page(caller_name):
@@ -279,21 +299,25 @@ def submit():
     remarks = request.form["remarks"]
     caller_name = request.form["caller_name"]
 
-    call_time = query_db("""
-        SELECT call_attempt_time FROM leads WHERE id = %s
+    # Fetch start time
+    result = query_db("""
+        SELECT call_start_time FROM leads WHERE id = %s
     """, (lead_id,))
 
-    if not call_time or not call_time[0][0]:
-        return "Please start the call before submitting remarks."
+    if not result or not result[0][0]:
+        return "Please click Start Call before submitting."
 
     query_db("""
         UPDATE leads
-        SET remarks = %s, call_status = 'completed'
+        SET
+            call_end_time = NOW(),
+            call_duration = EXTRACT(EPOCH FROM (NOW() - call_start_time))::INT,
+            remarks = %s,
+            call_status = 'completed'
         WHERE id = %s
     """, (remarks, lead_id), fetch=False)
 
     return redirect(f"/caller/{caller_name}")
-
 
 
 # =========================================================
