@@ -1,5 +1,5 @@
 # =========================================================
-# LEAD CALLING APP – MANAGER → CALLER (STABLE VERSION)
+# LEAD CALLING APP – MANAGER → CALLER (PRODUCTION STABLE)
 # =========================================================
 
 import os
@@ -35,6 +35,10 @@ def query_db(query, params=None, fetch=True):
     return result
 
 
+# =========================================================
+# DATABASE INITIALIZATION (SAFE)
+# =========================================================
+
 def init_db():
     query_db("""
         CREATE TABLE IF NOT EXISTS users (
@@ -51,17 +55,16 @@ def init_db():
             name TEXT,
             phone TEXT,
             assigned_to TEXT,
-            call_status TEXT,
+            call_status TEXT DEFAULT 'pending',
             remarks TEXT,
-            call_attempt_time TIMESTAMP
+            call_attempt_time TIMESTAMP,
+            call_start_time TIMESTAMP,
+            call_end_time TIMESTAMP,
+            call_duration INTEGER,
+            created_at TIMESTAMP DEFAULT NOW(),
+            reassigned_count INTEGER DEFAULT 0
         )
     """, fetch=False)
-    query_db("""
-    ALTER TABLE leads
-    ADD COLUMN IF NOT EXISTS call_start_time TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS call_end_time TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS call_duration INTEGER
-""", fetch=False)
 
 
 # =========================================================
@@ -92,8 +95,8 @@ def login():
 
         if user[0][2] == "manager":
             return redirect("/manager")
-        else:
-            return redirect(f"/caller/{username}")
+
+        return redirect(f"/caller/{username}")
 
     return render_template("login.html")
 
@@ -103,43 +106,23 @@ def logout():
     session.clear()
     return redirect("/login")
 
-@app.route("/debug_admin")
-def debug_admin():
-    user = query_db(
-        "SELECT id, username, password, role FROM users WHERE username='admin'"
-    )
-
-    return {
-        "exists": bool(user),
-        "row": user[0] if user else None,
-        "password_type": type(user[0][2]).__name__ if user else None
-    }
 
 # =========================================================
-# INITIAL MANAGER (ONE-TIME)
+# ADMIN / MANAGER SEED
 # =========================================================
 
 @app.route("/create_admin")
 def create_admin():
-    password = generate_password_hash("admin123")
+    hashed = generate_password_hash("admin123")
 
     query_db("DELETE FROM users WHERE username='admin'", fetch=False)
 
     query_db("""
         INSERT INTO users (username, password, role)
         VALUES (%s, %s, 'manager')
-    """, ("admin", password), fetch=False)
+    """, ("admin", hashed), fetch=False)
 
-    return "Admin RESET → admin / admin123"
-@app.route("/fix_admin_password")
-def fix_admin_password():
-    hashed = generate_password_hash("admin123")
-    query_db("""
-        UPDATE users
-        SET password = %s
-        WHERE username = 'admin'
-    """, (hashed,), fetch=False)
-    return "Admin password fixed"
+    return "Admin created → admin / admin123"
 
 
 # =========================================================
@@ -152,7 +135,7 @@ def manager():
         return redirect("/login")
 
     leads = query_db("""
-        SELECT id, name, phone, assigned_to, call_status, remarks
+        SELECT id, name, phone, assigned_to, call_status, remarks, call_duration
         FROM leads
         ORDER BY id DESC
     """)
@@ -174,36 +157,6 @@ def manager():
         callers=callers,
         stats=stats[0]
     )
-query_db("""
-    ALTER TABLE leads
-    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW(),
-    ADD COLUMN IF NOT EXISTS reassigned_count INTEGER DEFAULT 0
-""", fetch=False)
-@app.route("/reassign_leads", methods=["POST"])
-def reassign_leads():
-    if session.get("role") != "manager":
-        return redirect("/login")
-
-    new_caller = request.form["caller"]
-
-    # Get stale leads (24 hrs, untouched)
-    leads = query_db("""
-        SELECT id FROM leads
-        WHERE call_status = 'pending'
-          AND (call_start_time IS NULL OR call_duration IS NULL)
-          AND created_at < NOW() - INTERVAL '24 HOURS'
-    """)
-
-    for lead in leads:
-        query_db("""
-            UPDATE leads
-            SET
-                assigned_to = %s,
-                reassigned_count = reassigned_count + 1
-            WHERE id = %s
-        """, (new_caller, lead[0]), fetch=False)
-
-    return redirect("/manager")
 
 
 @app.route("/create_caller", methods=["POST"])
@@ -255,8 +208,8 @@ def upload_csv():
             continue
 
         query_db("""
-            INSERT INTO leads (name, phone, assigned_to, call_status, remarks)
-            VALUES (%s, %s, %s, 'pending', '')
+            INSERT INTO leads (name, phone, assigned_to)
+            VALUES (%s, %s, %s)
         """, (
             row["name"].strip(),
             str(row["phone"]).strip(),
@@ -266,6 +219,31 @@ def upload_csv():
         inserted += 1
 
     return f"{inserted} leads uploaded successfully"
+
+
+@app.route("/reassign_leads", methods=["POST"])
+def reassign_leads():
+    if session.get("role") != "manager":
+        return redirect("/login")
+
+    new_caller = request.form["caller"]
+
+    stale = query_db("""
+        SELECT id FROM leads
+        WHERE call_status='pending'
+          AND (call_start_time IS NULL)
+          AND created_at < NOW() - INTERVAL '24 HOURS'
+    """)
+
+    for lead in stale:
+        query_db("""
+            UPDATE leads
+            SET assigned_to=%s,
+                reassigned_count=reassigned_count+1
+            WHERE id=%s
+        """, (new_caller, lead[0]), fetch=False)
+
+    return redirect("/manager")
 
 
 # =========================================================
@@ -278,12 +256,25 @@ def caller_home():
         return redirect("/login")
 
     callers = query_db("""
-        SELECT DISTINCT assigned_to
-        FROM leads
-        ORDER BY assigned_to
+        SELECT DISTINCT assigned_to FROM leads ORDER BY assigned_to
     """)
 
     return render_template("caller_home.html", callers=callers)
+
+
+@app.route("/caller/<caller_name>")
+def caller_page(caller_name):
+    if session.get("role") != "caller" or session.get("username") != caller_name:
+        return redirect("/login")
+
+    leads = query_db("""
+        SELECT id, name, phone
+        FROM leads
+        WHERE assigned_to=%s AND call_status='pending'
+    """, (caller_name,))
+
+    return render_template("caller.html", leads=leads, caller_name=caller_name)
+
 
 @app.route("/start_call/<int:lead_id>", methods=["POST"])
 def start_call(lead_id):
@@ -298,34 +289,6 @@ def start_call(lead_id):
 
     return {"status": "started"}
 
-@app.route("/caller/<caller_name>")
-def caller_page(caller_name):
-    if session.get("role") != "caller" or session.get("username") != caller_name:
-        return redirect("/login")
-
-    leads = query_db("""
-        SELECT id, name, phone
-        FROM leads
-        WHERE assigned_to=%s AND call_status='pending'
-    """, (caller_name,))
-
-    return render_template(
-        "caller.html",
-        leads=leads,
-        caller_name=caller_name
-    )
-
-
-@app.route("/mark_called/<int:lead_id>", methods=["POST"])
-def mark_called(lead_id):
-    query_db("""
-        UPDATE leads
-        SET call_attempt_time = NOW()
-        WHERE id=%s
-    """, (lead_id,), fetch=False)
-
-    return {"status": "ok"}
-
 
 @app.route("/submit", methods=["POST"])
 def submit():
@@ -336,13 +299,13 @@ def submit():
     remarks = request.form["remarks"]
     caller_name = request.form["caller_name"]
 
-    # Fetch start time
-    result = query_db("""
-        SELECT call_start_time FROM leads WHERE id = %s
-    """, (lead_id,))
+    start = query_db(
+        "SELECT call_start_time FROM leads WHERE id=%s",
+        (lead_id,)
+    )
 
-    if not result or not result[0][0]:
-        return "Please click Start Call before submitting."
+    if not start or not start[0][0]:
+        return "Start call first"
 
     query_db("""
         UPDATE leads
@@ -362,10 +325,6 @@ def submit():
 # =========================================================
 
 if __name__ == "__main__":
-    try:
-        init_db()
-    except Exception as e:
-        print("INIT DB ERROR:", e)
-
+    init_db()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
