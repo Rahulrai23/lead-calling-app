@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
-<head><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Caller Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -14,47 +15,85 @@
 <div class="container">
 
 {% for lead in leads %}
-<div class="card">
-  <p><b>Name:</b> {{ lead[1] }}</p>
-  <p><b>Phone:</b> <a href="tel:{{ lead[2] }}">{{ lead[2] }}</a></p>
+<div class="card" data-lead-id="{{ lead[0] }}">
 
-  <!-- START CALL -->
-  <button onclick="startCall({{ lead[0] }}, this)">
-    📞 Start Call
-  </button>
+  <p><b>Name:</b> {{ lead[1] }}</p>
+
+  <p><b>Phone:</b></p>
+  <!-- TAP TO CALL -->
+  <a href="tel:{{ lead[2] }}">
+    <button class="call-btn" onclick="startCall({{ lead[0] }}, this)">
+      📞 Call {{ lead[2] }}
+    </button>
+  </a>
 
   <!-- SUBMIT FORM -->
-  <form method="POST" action="/submit">
+  <form method="POST" action="/submit" onsubmit="return validateSubmit(this)">
     <input type="hidden" name="lead_id" value="{{ lead[0] }}">
     <input type="hidden" name="caller_name" value="{{ caller_name }}">
 
-    <textarea name="remarks"
-      placeholder="Call remarks"
+    <textarea
+      name="remarks"
+      placeholder="Write call remarks here…"
       disabled
       required></textarea>
 
     <button type="submit" disabled>
-      Submit
+      ✅ Submit Call
     </button>
   </form>
+
 </div>
 {% else %}
-<p>No pending leads 🎉</p>
+<div class="card">
+  <p>No pending leads 🎉</p>
+</div>
 {% endfor %}
 
 </div>
 
 <script>
+/* START CALL */
 function startCall(leadId, btn) {
   fetch(`/start_call/${leadId}`, { method: "POST" })
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) throw new Error("Call not started");
+      return res.json();
+    })
     .then(() => {
       const card = btn.closest(".card");
+
+      // Enable remarks & submit
       card.querySelector("textarea").disabled = false;
       card.querySelector("button[type='submit']").disabled = false;
+
+      // Lock call button
       btn.disabled = true;
       btn.innerText = "📞 Call Started";
+      btn.style.background = "#95a5a6";
+    })
+    .catch(() => {
+      alert("❌ Failed to start call. Try again.");
     });
+}
+
+/* BLOCK SUBMIT WITHOUT START CALL */
+function validateSubmit(form) {
+  const textarea = form.querySelector("textarea");
+
+  if (textarea.disabled) {
+    alert("❌ Please start the call before submitting remarks");
+    return false;
+  }
+
+  if (textarea.value.trim().length < 5) {
+    alert("❌ Please enter proper call remarks");
+    return false;
+  }
+
+  // Lock submit to prevent double click
+  form.querySelector("button[type='submit']").disabled = true;
+  return true;
 }
 </script>
 
