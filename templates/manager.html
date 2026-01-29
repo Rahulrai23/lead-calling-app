@@ -5,6 +5,17 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<h3>🔁 Auto Re-assign Uncalled Leads</h3>
+
+<form method="POST" action="/reassign_leads">
+  <label>Reassign to Caller:</label>
+  <select name="caller" required>
+    {% for c in callers %}
+      <option value="{{ c[0] }}">{{ c[0] }}</option>
+    {% endfor %}
+  </select>
+  <button>Reassign Uncalled Leads</button>
+</form>
 
 <div class="navbar">
   Manager Dashboard
